@@ -1,0 +1,8 @@
+# Helm values for development.
+# Overrides default values only for environment-specific settings.
+
+namespace: developmentloop-demo-development
+
+appEnv: Development
+
+image: ghcr.io/creid-octopus/development-loop:latest

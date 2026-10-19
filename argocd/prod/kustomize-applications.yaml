@@ -1,0 +1,37 @@
+# ArgoCD ApplicationSet for Kustomize-built developmentloop-demo (production).
+# Production applies its overlay (namespace + ConfigMap patch) on top of k8s/kustomize/base.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: kustomize-applications
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          - name: kustomize-developmentloop-demo-production
+            environment: production
+            namespace: developmentloop-demo-production
+            path: k8s/kustomize/production
+  template:
+    metadata:
+      name: '{{ name }}'
+      annotations:
+        argo.octopus.com/project.pt-argocd-kustomize: "pt-argocd-kustomize"
+        argo.octopus.com/environment.pt-argocd-kustomize: '{{ environment }}'
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/creid-octopus/development-loop.git
+        targetRevision: HEAD
+        name: argocd-kustomize
+        path: '{{ path }}'
+      destination:
+        namespace: '{{ namespace }}'
+        server: https://kubernetes.default.svc
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true

@@ -1,0 +1,39 @@
+{{- if .Values.trafficBaseline.enabled }}
+# Baseline traffic for monitoring and soak windows.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.appName }}-traffic
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: {{ .Values.appName }}-traffic
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{ .Values.appName }}-traffic
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.appName }}-traffic
+    spec:
+      containers:
+        - name: curl
+          image: curlimages/curl:latest
+          env:
+            - name: TARGET
+              value: "http://{{ .Values.appName }}:{{ .Values.servicePort }}/"
+            - name: INTERVAL_SECONDS
+              value: {{ .Values.trafficBaseline.intervalSeconds | quote }}
+          command: ["sh", "-c"]
+          args:
+            - |
+              echo "Baseline traffic to $TARGET every ${INTERVAL_SECONDS}s"
+              while true; do
+                curl -s -o /dev/null -m 5 "$TARGET" || true
+                sleep "$INTERVAL_SECONDS"
+              done
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits: { cpu: 50m, memory: 32Mi }
+{{- end }}

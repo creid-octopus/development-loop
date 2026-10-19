@@ -1,0 +1,341 @@
+# Container image build — builds and pushes to GHCR on src/** or Dockerfile changes.
+#
+# Trigger behaviour:
+#   main (push, src/** or Dockerfile) → release target (distroless), stable version, auto-attested
+#   schedule (weekly, Monday 06:00)   → same as main push, no-cache to force fresh base image pull
+#   workflow_dispatch                  → manual build from any branch; target overridable (use for
+#                                        feature/RC images — pick branch + debug target in the UI)
+#
+# Versioning mirrors publish.yml:
+#   main       → 1.0.<run>            e.g. ghcr.io/org/repo:1.0.42
+#   feature/** → 0.0.0-<slug>.<run>   e.g. ghcr.io/org/repo:0.0.0-feature-foo.42
+#
+# Each push produces two tags — a semver tag and a SHA-pinned tag:
+#   :1.0.42                      — human-readable, usable in Octopus feed references
+#   :1.0.42-sha-a1b2c3d          — immutable, safe for k8s manifest pinning
+#
+# GHCR setup: no secrets to configure. GITHUB_TOKEN is granted packages: write
+# below and works out of the box. The package appears under the repo's Packages
+# tab after the first push. Visibility inherits the repo's visibility setting
+# (change it under Settings → Packages if needed).
+#
+# Provenance attestation: stable releases (main) are attested via
+# actions/attest-build-provenance and stored in GitHub's attestation store.
+# Verify with: gh attestation verify oci://<image>:<tag> --repo <owner>/<repo>
+#
+# Future: replace attestation with cosign sign for registry-agnostic signatures.
+
+name: Build image
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "src/**"
+      - "Dockerfile"
+      - ".dockerignore"
+
+  # Weekly scheduled rebuild — ensures upstream OS patches in the base image
+  # (node:24-slim, distroless) are picked up even when no code has changed.
+  # BuildKit resolves floating tags to their current digest on every build, so
+  # a changed upstream digest automatically invalidates cached layers. The
+  # scheduled run forces no-cache (see build step) to guarantee a fresh pull
+  # regardless of what the GHA cache holds.
+  schedule:
+    - cron: '0 6 * * 1'   # every Monday at 06:00 UTC
+
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Build target — debug (node:24-slim) or release (distroless)"
+        type: choice
+        options:
+          - release
+          - debug
+        default: release
+        required: true
+      dry_run:
+        description: "Dry run — build only, skip push and attestation"
+        type: boolean
+        default: false
+        required: false
+
+permissions:
+  contents: write      # write required to submit SBOM to GitHub dependency graph
+  packages: write      # push image to GHCR
+  attestations: write  # store provenance attestations
+  id-token: write      # OIDC token required by attest-build-provenance
+  security-events: write  # upload Trivy SARIF to GitHub Security tab
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}   # e.g. cory/sample-webapp → ghcr.io/cory/sample-webapp
+  SBOM_PACKAGE: developmentloop-sbom
+  # Octopus OIDC login. Neither value is a secret: the service account only
+  # trusts tokens issued to this repo, as configured in Octopus.
+  OCTOPUS_SERVER_URL: https://creid.octopus.app
+  OCTOPUS_SERVICE_ACCOUNT_ID: d7b6439c-edd8-4f5c-b035-ad3a647807b4
+  VERSION_MAJOR: "1"
+  VERSION_MINOR: "0"
+
+jobs:
+  build:
+    name: Build & push image
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # ── Step 1: Compute version, target, and image tags ─────────────────────
+      # Branch routing mirrors publish.yml — same version scheme, same slug logic.
+      # workflow_dispatch can override the build target (debug/release).
+      - name: Compute build metadata
+        id: meta
+        run: |
+          BRANCH="$GITHUB_REF_NAME"
+          SHORT_SHA="${GITHUB_SHA::7}"
+          BUILT_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          if [[ "$BRANCH" == "main" ]]; then
+            VERSION="${{ env.VERSION_MAJOR }}.${{ env.VERSION_MINOR }}.${{ github.run_number }}"
+            BUILD_TARGET="release"
+            IS_RELEASE="true"
+          else
+            SAFE_BRANCH=$(echo "$BRANCH" | sed 's|[^a-zA-Z0-9]|-|g' | tr '[:upper:]' '[:lower:]')
+            VERSION="0.0.0-${SAFE_BRANCH}.${{ github.run_number }}"
+            BUILD_TARGET="debug"
+            IS_RELEASE="false"
+          fi
+
+          # workflow_dispatch can override the target (e.g. test a release build on a feature branch)
+          if [[ -n "${{ inputs.target }}" ]]; then
+            BUILD_TARGET="${{ inputs.target }}"
+          fi
+
+          IMAGE_REF="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+
+          echo "version=$VERSION"           >> "$GITHUB_OUTPUT"
+          echo "branch=$BRANCH"             >> "$GITHUB_OUTPUT"
+          echo "short_sha=$SHORT_SHA"       >> "$GITHUB_OUTPUT"
+          echo "built_at=$BUILT_AT"         >> "$GITHUB_OUTPUT"
+          echo "build_target=$BUILD_TARGET" >> "$GITHUB_OUTPUT"
+          echo "is_release=$IS_RELEASE"     >> "$GITHUB_OUTPUT"
+          echo "image_ref=$IMAGE_REF"       >> "$GITHUB_OUTPUT"
+
+      # ── Step 2: Set up Buildx ────────────────────────────────────────────────
+      # Required for BuildKit features: multi-stage caching and GHA cache backend.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # ── Step 3: Log in to GHCR ──────────────────────────────────────────────
+      # Uses the built-in GITHUB_TOKEN — no secret to configure.
+      # Skipped on dry runs (nothing to push, no auth needed).
+      - name: Log in to GHCR
+        if: inputs.dry_run != true
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── Step 4: Generate SBOM ───────────────────────────────────────────────
+      # Two Trivy runs against the repository filesystem (scan-type: 'fs'):
+      #
+      #   format: 'github'     → submits directly to GitHub's dependency graph.
+      #                          Feeds Dependabot alerts and the dependency tab.
+      #                          Requires contents: write permission.
+      #
+      #   format: 'spdx-json'  → writes sbom.spdx.json for packaging and pushing
+      #                          to Octopus. This is the artifact the CD pipeline
+      #                          consumes for supply chain verification.
+      #
+      # Filesystem scan is used (not image scan) so the SBOM can be generated
+      # before the build and reflects the declared application dependencies.
+      # OS-level findings from the base image are surfaced separately by the
+      # image scan in step 6.
+      - name: Generate SBOM — GitHub dependency graph
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: 'fs'
+          format: 'github'
+          output: 'dependency-graph.sbom.json'
+          scan-ref: '.'
+          github-pat: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate SBOM — SPDX for Octopus
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: 'fs'
+          format: 'spdx-json'
+          output: 'sbom.spdx.json'
+          scan-ref: '.'
+
+      # ── Step 5: Build (and push) ─────────────────────────────────────────────
+      # Build args are baked to ENV in the Dockerfile. server.js reads them via
+      # process.env fallback — no .build-env file needed in the image.
+      #
+      # provenance: false — disables BuildKit's inline provenance manifest so we
+      # get a stable single-platform digest. GitHub attestation is handled in
+      # step 11 via actions/attest-build-provenance instead.
+      #
+      # no-cache — forced on scheduled runs so the base image is always pulled
+      # fresh, picking up upstream OS patches. Code-triggered builds use the GHA
+      # cache normally; BuildKit's digest resolution will still invalidate cached
+      # layers if upstream changed since the last build.
+      - name: Build and push image
+        id: push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          no-cache: ${{ github.event_name == 'schedule' }}
+          push: ${{ inputs.dry_run != true }}
+          target: ${{ steps.meta.outputs.build_target }}
+          tags: |
+            ${{ steps.meta.outputs.image_ref }}:latest
+            ${{ steps.meta.outputs.image_ref }}:${{ steps.meta.outputs.version }}
+            ${{ steps.meta.outputs.image_ref }}:${{ steps.meta.outputs.version }}-sha-${{ steps.meta.outputs.short_sha }}
+          build-args: |
+            APP_VERSION=${{ steps.meta.outputs.version }}
+            APP_BRANCH=${{ steps.meta.outputs.branch }}
+            APP_BUILD=${{ github.run_number }}
+            APP_BUILT_AT=${{ steps.meta.outputs.built_at }}
+            APP_COMMIT_SHA=${{ github.sha }}
+          labels: |
+            org.opencontainers.image.version=${{ steps.meta.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.created=${{ steps.meta.outputs.built_at }}
+          provenance: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ── Step 6: Scan image for vulnerabilities ──────────────────────────────
+      # Trivy scans the pushed image — different surface from the fs scan above.
+      # Catches OS-level CVEs in the base image (node:24-slim / distroless) that
+      # wouldn't appear in a repo scan.
+      #
+      # Severity starts at MEDIUM (not LOW) — container base images generate
+      # significant noise at LOW, especially for OS packages.
+      #
+      # Skipped on dry runs (no image was pushed to scan).
+      - name: Scan image for vulnerabilities
+        if: inputs.dry_run != true
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: '${{ steps.meta.outputs.image_ref }}:${{ steps.meta.outputs.version }}'
+          vuln-type: 'os,library'
+          ignore-unfixed: true
+          exit-code: '0'
+          format: 'sarif'
+          output: 'trivy-image-results.sarif'
+          severity: 'MEDIUM,HIGH,CRITICAL'
+
+      - name: Upload image scan results to GitHub Security tab
+        if: inputs.dry_run != true
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: 'trivy-image-results.sarif'
+
+      # ── Step 7: Package SBOM ────────────────────────────────────────────────
+      # Wraps sbom.spdx.json as a versioned zip for the Octopus built-in feed.
+      # Package ID matches the env var SBOM_PACKAGE so the version always tracks
+      # the image version — both artifacts are stamped with the same semver.
+      - name: Package SBOM
+        id: sbom_package
+        uses: OctopusDeploy/create-zip-package-action@v4
+        with:
+          package_id: '${{ env.SBOM_PACKAGE }}'
+          version: '${{ steps.meta.outputs.version }}'
+          output_folder: './packaging'
+          base_path: '.'
+          files: 'sbom.spdx.json'
+
+      # ── Step 8: Log in to Octopus (OIDC) ─────────────────────────────────────
+      # Exchanges the GitHub OIDC token for a short-lived Octopus access token.
+      # The login action exports OCTOPUS_URL and OCTOPUS_ACCESS_TOKEN, so later
+      # Octopus actions need no server or api_key inputs.
+      # Requires id-token: write (set at the workflow level).
+      # Skipped on dry runs.
+      - name: Log in to Octopus Deploy
+        if: inputs.dry_run != true
+        uses: OctopusDeploy/login@v1
+        with:
+          server: ${{ env.OCTOPUS_SERVER_URL }}
+          service_account_id: ${{ env.OCTOPUS_SERVICE_ACCOUNT_ID }}
+
+      # ── Step 9: Push SBOM to Octopus ─────────────────────────────────────────
+      # Pushes the versioned SBOM zip to the Octopus built-in feed.
+      # OverwriteExisting is safe here: if the same version is re-pushed (e.g.
+      # after a workflow retry) we want the latest content, not a failure.
+      # Skipped on dry runs.
+      - name: Push SBOM to Octopus
+        if: inputs.dry_run != true
+        uses: OctopusDeploy/push-package-action@v4
+        with:
+          space: ${{ secrets.OCTOPUS_SPACE }}
+          packages: ${{ steps.sbom_package.outputs.package_file_path }}
+          overwrite_mode: OverwriteExisting
+
+      # ── Step 10: Build attestation subject checksums ──────────────────────────
+      # Multi-subject attestation following the Trident reference pattern.
+      # A single attest-build-provenance call covers both the image and the SBOM
+      # zip — this closes the gap of a substituted SBOM passing content checks
+      # but failing provenance verification.
+      #
+      # Checksums file format (two spaces between hash and name):
+      #   <sha256-no-prefix>  <subject-name>
+      #
+      # Image: digest comes from the push step output; strip the "sha256:" prefix.
+      # SBOM:  sha256sum the local zip file; use the basename as the subject name.
+      #
+      # Only runs for stable releases (main branch). Feature/RC images are not
+      # attested — they are not promoted to production.
+      - name: Create attestation subject checksums
+        if: inputs.dry_run != true && steps.meta.outputs.is_release == 'true'
+        run: |
+          IMAGE_SHA=$(echo "${{ steps.push.outputs.digest }}" | sed 's/sha256://')
+          SBOM_PKG="${{ steps.sbom_package.outputs.package_file_path }}"
+          SBOM_SHA=$(sha256sum "$SBOM_PKG" | awk '{print $1}')
+          SBOM_NAME=$(basename "$SBOM_PKG")
+          IMAGE_REF="${{ steps.meta.outputs.image_ref }}:${{ steps.meta.outputs.version }}"
+          printf "%s  %s\n%s  %s\n" \
+            "$IMAGE_SHA"  "$IMAGE_REF" \
+            "$SBOM_SHA"   "$SBOM_NAME" \
+            > subject.checksums.txt
+          echo "Attestation subjects:"
+          cat subject.checksums.txt
+
+      # ── Step 11: Attest build provenance (multi-subject) ────────────────────
+      # Produces a SLSA Level 2 provenance attestation stored in GitHub's
+      # attestation store, covering both the image digest and the SBOM zip.
+      #
+      # Verify after push:
+      #   gh attestation verify oci://ghcr.io/<owner>/<repo>:<version> --repo <owner>/<repo>
+      #   gh attestation verify <sbom-zip-path> --repo <owner>/<repo>
+      - name: Attest build provenance
+        if: inputs.dry_run != true && steps.meta.outputs.is_release == 'true'
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-checksums: subject.checksums.txt
+
+      # ── Step 12: Job summary ─────────────────────────────────────────────────
+      - name: Image summary
+        if: always()
+        run: |
+          {
+            echo "### Image — \`${{ steps.meta.outputs.version }}\`"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| **Target** | \`${{ steps.meta.outputs.build_target }}\` |"
+            echo "| **Version tag** | \`${{ steps.meta.outputs.image_ref }}:${{ steps.meta.outputs.version }}\` |"
+            echo "| **SHA tag** | \`${{ steps.meta.outputs.image_ref }}:${{ steps.meta.outputs.version }}-sha-${{ steps.meta.outputs.short_sha }}\` |"
+            if [[ "${{ inputs.dry_run }}" != "true" ]]; then
+              echo "| **Digest** | \`${{ steps.push.outputs.digest }}\` |"
+              echo "| **SBOM package** | \`${{ steps.sbom_package.outputs.package_file_path }}\` |"
+              echo "| **Attested** | ${{ steps.meta.outputs.is_release == 'true' && 'yes — image + SBOM (main release)' || 'no (pre-release)' }} |"
+            else
+              echo "| **Pushed** | dry run — skipped |"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

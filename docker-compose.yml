@@ -1,0 +1,70 @@
+# Local OpenTelemetry + Datadog loop.
+#
+# Runs the app (debug image) next to a real Datadog Agent, with the same
+# OTEL_* settings the Kubernetes manifests use. Only the endpoint differs:
+# here the agent is "dd-agent", in AKS it's the node's HOST_IP.
+#
+# Setup:   cp .env.example .env   (then add your DD_API_KEY)
+# Start:   docker compose up --build
+# Traffic: docker compose --profile traffic up traffic
+# Check:   docker compose exec dd-agent agent status | grep -A12 -E "OTLP|APM Agent"
+# Stop:    docker compose down
+#
+# Debugging: src/ is mounted and the app runs under `node --watch --inspect`.
+# Edits restart the app. Attach a debugger to localhost:9229.
+
+services:
+  dd-agent:
+    image: gcr.io/datadoghq/agent:7
+    environment:
+      DD_API_KEY: ${DD_API_KEY:?Set DD_API_KEY in .env}
+      DD_SITE: ${DD_SITE:-datadoghq.com}
+      DD_HOSTNAME: developmentloop-local
+      DD_APM_ENABLED: "true"
+      DD_APM_NON_LOCAL_TRAFFIC: "true"
+      DD_OTLP_CONFIG_RECEIVER_PROTOCOLS_HTTP_ENDPOINT: 0.0.0.0:4318
+      DD_OTLP_CONFIG_RECEIVER_PROTOCOLS_GRPC_ENDPOINT: 0.0.0.0:4317
+      DD_LOGS_ENABLED: "false"
+    healthcheck:
+      test: ["CMD", "agent", "health"]
+      interval: 10s
+      retries: 6
+
+  app:
+    build:
+      context: .
+      target: debug
+      args:
+        APP_VERSION: ${APP_VERSION:-0.0.1-local}
+        APP_BRANCH: local
+        APP_COMMIT_SHA: local
+    command: ["node", "--watch", "--inspect=0.0.0.0:9229", "server.js"]
+    ports:
+      - "3001:3000"
+      - "9229:9229"
+    volumes:
+      - ./src:/app
+      - /app/node_modules   # keep the image's node_modules, not the host's
+    environment:
+      APP_ENV: ${APP_ENV:-local-otel}
+      OTEL_SERVICE_NAME: raw-developmentloop-demo
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://dd-agent:4318
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_LOGS_EXPORTER: none
+      # Skip the "host" detector so the agent sets the hostname (see manifests)
+      OTEL_NODE_RESOURCE_DETECTORS: env,process
+      # Faster feedback than the 60s default
+      OTEL_METRIC_EXPORT_INTERVAL: "10000"
+    depends_on:
+      dd-agent:
+        condition: service_healthy
+
+  # Optional steady traffic: docker compose --profile traffic up traffic
+  traffic:
+    profiles: ["traffic"]
+    image: curlimages/curl:latest
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["while true; do curl -s -o /dev/null -w '%{http_code} ' http://app:3000/; sleep 1; done"]
+    depends_on: [app]

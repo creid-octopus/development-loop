@@ -1,0 +1,87 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.appName }}
+  labels:
+    {{- include "app.labels" . | nindent 4 }}
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.appName }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1       # one extra pod during rollout
+      maxUnavailable: 0  # never drop below desired count
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.appName }}
+        {{- include "app.envLabels" . | nindent 8 }}
+      {{- with (include "app.datadogAnnotations" .) }}
+      annotations:
+        {{- . | nindent 8 }}
+      {{- end }}
+    spec:
+      containers:
+        - name: {{ .Values.appName }}
+          # Image reference — updated by Octopus/ArgoCD at deploy time.
+          image: {{ .Values.image }}
+          ports:
+            - containerPort: {{ .Values.containerPort }}
+          env:
+            # Runtime identity — set per environment via ConfigMap or Octopus variable substitution.
+            # This is the only env var not baked into the image at build time.
+            - name: APP_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ .Values.configMapName }}
+                  key: APP_ENV
+            {{- if .Values.otel.enabled }}
+            # OpenTelemetry. The app sends OTLP to the Datadog Agent on its node.
+            # Version and environment come from APP_VERSION (image) and APP_ENV.
+            - name: HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: OTEL_SERVICE_NAME
+              value: {{ .Values.appName | quote }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://$(HOST_IP):{{ .Values.otel.port }}"
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: "http/protobuf"
+            - name: OTEL_TRACES_EXPORTER
+              value: "otlp"
+            - name: OTEL_METRICS_EXPORTER
+              value: "otlp"
+            - name: OTEL_LOGS_EXPORTER
+              value: "none"
+            - name: OTEL_NODE_RESOURCE_DETECTORS
+              value: "env,process"
+            {{- else }}
+            - name: OTEL_SDK_DISABLED
+              value: "true"
+            {{- end }}
+          resources:
+            requests:
+              cpu: {{ .Values.requestsCpu }}
+              memory: {{ .Values.requestsMemory }}
+            limits:
+              cpu: {{ .Values.limitsCpu }}
+              memory: {{ .Values.limitsMemory }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.probePath }}
+              port: {{ .Values.containerPort }}
+            initialDelaySeconds: {{ .Values.livenessInitialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessPeriodSeconds }}
+            failureThreshold: {{ .Values.livenessFailureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.probePath }}
+              port: {{ .Values.containerPort }}
+            initialDelaySeconds: {{ .Values.readinessInitialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessPeriodSeconds }}
+            failureThreshold: {{ .Values.readinessFailureThreshold }}

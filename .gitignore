@@ -1,0 +1,42 @@
+# ── Local files/documentation ──────────────────────────────────────────────────
+agent-files/
+
+
+# ── Terraform ──────────────────────────────────────────────────────────────────
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfstate.lock.info
+terraform.tfvars
+local.tfvars
+.terraform.lock.hcl
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# ── Node ───────────────────────────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+.npm
+.node_repl_history
+src/.build-env
+
+# ── OS / editor ────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ── Build artifacts ────────────────────────────────────────────────────────────
+*.zip
+dist/
+build/
+
+# -- .envrc -────────────────────────────────────────────────────────────────────────
+**/.envrc
+# -- Local docker compose secrets
+.env

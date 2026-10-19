@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: raw-developmentloop-demo-config
+  namespace: developmentloop-demo-test
+data:
+  APP_ENV: "Test"

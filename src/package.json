@@ -1,0 +1,20 @@
+{
+  "name": "developmentloop-demo-app",
+  "version": "1.0.0",
+  "description": "Inner dev loop demo app — visual deployment indicator",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "@opentelemetry/instrumentation-express": "^0.70.0",
+    "@opentelemetry/instrumentation-http": "^0.222.0",
+    "@opentelemetry/resources": "^2.11.0",
+    "@opentelemetry/sdk-node": "^0.222.0",
+    "express": "^4.19.2"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

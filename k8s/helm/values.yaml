@@ -1,0 +1,43 @@
+# Default values for developmentloop-demo.
+# Per-environment overrides live in values-<env>.yaml.
+
+appName: helm-developmentloop-demo
+image: ghcr.io/creid-octopus/development-loop:latest
+
+replicaCount: 1
+namespace: developmentloop-demo
+configMapName: helm-developmentloop-demo-config
+
+appEnv: Development
+
+containerPort: 3000
+servicePort: 80
+probePath: /health
+
+requestsCpu: 100m
+requestsMemory: 128Mi
+limitsCpu: 250m
+limitsMemory: 256Mi
+
+# OpenTelemetry export to the Datadog Agent's OTLP host port.
+otel:
+  enabled: true
+  port: 4318
+
+# Datadog Autodiscovery http_check on /health.
+datadog:
+  httpCheck: true
+
+# Steady background requests so monitoring always has data.
+# Off by default: the Argo CD tracks are standard deployables.
+trafficBaseline:
+  enabled: false
+  intervalSeconds: 2
+
+livenessInitialDelaySeconds: 10
+livenessPeriodSeconds: 30
+livenessFailureThreshold: 3
+
+readinessInitialDelaySeconds: 5
+readinessPeriodSeconds: 10
+readinessFailureThreshold: 3

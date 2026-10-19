@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: developmentloop-demo
+  labels:
+    app: developmentloop-demo
+spec:
+  type: LoadBalancer
+  selector:
+    app: developmentloop-demo
+  ports:
+    - name: http
+      port: 80
+      targetPort: 3000

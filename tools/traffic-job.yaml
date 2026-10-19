@@ -1,0 +1,74 @@
+# Traffic generator for demos and soak windows.
+#
+# Sends steady requests to the app, then stops on its own.
+# Lives outside k8s/raw so deployments never pick it up.
+#
+# All settings are the env values below. Defaults work as-is.
+#
+# Local:
+#   kubectl delete job traffic -n pt-developmentloop-development --ignore-not-found
+#   kubectl apply -n pt-developmentloop-development -f tools/traffic-job.yaml
+#
+# Octopus ("Deploy raw Kubernetes YAML" step, sourced from git):
+#   Namespace comes from the step's namespace setting.
+#   Override env values with Structured Configuration Variables, e.g.
+#     spec:template:spec:containers:0:env:2:value  =  #{Traffic.DurationMinutes}
+#     spec:template:spec:containers:0:env:3:value  =  #{Traffic.SimulateUrlPath}
+#   (The index is the env entry's position, counting from 0.)
+#
+# Watch: kubectl logs -n <namespace> job/traffic -f
+# Stop:  kubectl delete -n <namespace> job/traffic
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: traffic
+  labels:
+    app: traffic
+spec:
+  # Safety cap only. DURATION_MINUTES below is the real stop time.
+  activeDeadlineSeconds: 7200
+  # Delete the finished Job (and its pod) 5 minutes after it ends.
+  ttlSecondsAfterFinished: 300
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: traffic
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: curl
+          image: curlimages/curl:latest
+          env:
+            # 0: service URL inside the cluster
+            - name: TARGET
+              value: "http://raw-developmentloop-demo/"
+            # 1: delay between requests
+            - name: INTERVAL_SECONDS
+              value: "1"
+            # 2: how long to send traffic (max 120, see activeDeadlineSeconds)
+            - name: DURATION_MINUTES
+              value: "15"
+            # 3: optional failure to start first, as a path on TARGET.
+            #    "none" (or empty) means no simulation. Examples:
+            #      simulate/errors?rate=0.5&minutes=3
+            #      simulate/latency?ms=1500&minutes=3
+            #      simulate/reset
+            - name: SIMULATE_PATH
+              value: "none"
+          command: ["sh", "-c"]
+          args:
+            - |
+              if [ -n "$SIMULATE_PATH" ] && [ "$SIMULATE_PATH" != "none" ]; then
+                echo "Starting simulation: $SIMULATE_PATH"
+                curl -s "${TARGET%/}/$SIMULATE_PATH"; echo
+              fi
+              end=$(( $(date +%s) + DURATION_MINUTES * 60 ))
+              while [ "$(date +%s)" -lt "$end" ]; do
+                curl -s -o /dev/null -w "%{http_code}\n" "$TARGET"
+                sleep "$INTERVAL_SECONDS"
+              done
+              echo "Done after $DURATION_MINUTES minutes"
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits: { cpu: 50m, memory: 32Mi }

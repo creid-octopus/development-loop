@@ -1,0 +1,139 @@
+# Continuous integration — runs on every push and pull request.
+#
+# Proves the code builds correctly. No side-effects outside this repository.
+# The image is built but not pushed — a passing run means the Dockerfile and
+# build args are valid and the image is publishable.
+#
+# For image publishing see build-image.yml (triggers on main or dispatch).
+# For Octopus integration see publish.yml (main merges or dispatch).
+
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  security-events: write  # upload Trivy SARIF to GitHub Security tab
+
+env:
+  VERSION_MAJOR: "1"
+  VERSION_MINOR: "0"
+
+jobs:
+  build:
+    name: Build image (dry run)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # ── Scan: Filesystem vulnerability scan ──────────────────────────────────
+      # Trivy scans the repo for vulnerable dependencies and misconfigurations.
+      # Results are uploaded to the GitHub Security tab (Code scanning alerts).
+      #
+      # Runs before Node setup — Trivy reads package-lock.json directly, no
+      # install needed. Fast feedback even before the build steps run.
+      #
+      # exit-code: '0' — non-blocking. Establish a vulnerability baseline first,
+      # then tighten to exit-code: '1' on HIGH/CRITICAL once the backlog is clear.
+      - name: Scan filesystem for vulnerabilities
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: 'fs'
+          ignore-unfixed: true
+          exit-code: '0'
+          format: 'sarif'
+          output: 'trivy-fs-results.sarif'
+          severity: 'LOW,MEDIUM,HIGH,CRITICAL'
+
+      - name: Upload scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: 'trivy-fs-results.sarif'
+          category: 'Dependency Scanning'
+
+      # ── Step 1: Compute version ──────────────────────────────────────────────
+      # Same scheme as build-image.yml — build args are stamped so the dry build
+      # exercises the full ARG → ENV path in the Dockerfile.
+      - name: Compute build metadata
+        id: meta
+        run: |
+          BRANCH="$GITHUB_REF_NAME"
+          SHORT_SHA="${GITHUB_SHA::7}"
+          BUILT_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          if [[ "$BRANCH" == "main" ]]; then
+            VERSION="${{ env.VERSION_MAJOR }}.${{ env.VERSION_MINOR }}.${{ github.run_number }}"
+          else
+            SAFE_BRANCH=$(echo "$BRANCH" | sed 's|[^a-zA-Z0-9]|-|g' | tr '[:upper:]' '[:lower:]')
+            VERSION="0.0.0-${SAFE_BRANCH}.${{ github.run_number }}"
+          fi
+
+          echo "version=$VERSION"     >> "$GITHUB_OUTPUT"
+          echo "branch=$BRANCH"       >> "$GITHUB_OUTPUT"
+          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+          echo "built_at=$BUILT_AT"   >> "$GITHUB_OUTPUT"
+
+      # ── Step 2: Set up Buildx ────────────────────────────────────────────────
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # ── Step 3: Build image (dry run) ────────────────────────────────────────
+      # Builds the debug target (node:24-slim) — faster than distroless and
+      # covers the same Dockerfile logic. Not pushed to GHCR.
+      #
+      # load: true — exports the image to the local Docker daemon so Trivy can
+      # scan it in the next step. Without load, the image exists only in BuildKit's
+      # internal cache and is inaccessible to other tools.
+      #
+      # Note: load + cache-to: gha conflict when used together (BuildKit can't
+      # simultaneously export to daemon and write to the GHA cache backend in
+      # the same invocation). cache-from still works — we read from cache on hits,
+      # but the post-build cache write is omitted on CI dry-build runs.
+      - name: Build image (dry run)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          load: true
+          tags: developmentloop-demo:ci
+          target: debug
+          build-args: |
+            APP_VERSION=${{ steps.meta.outputs.version }}
+            APP_BRANCH=${{ steps.meta.outputs.branch }}
+            APP_BUILD=${{ github.run_number }}
+            APP_BUILT_AT=${{ steps.meta.outputs.built_at }}
+            APP_COMMIT_SHA=${{ github.sha }}
+          provenance: false
+          cache-from: type=gha
+
+      # ── Step 4: Scan image for vulnerabilities (best-effort) ─────────────────
+      # Trivy scans the locally-loaded image — catches OS-level CVEs in the base
+      # image (node:24-slim) and library CVEs that the filesystem scan misses.
+      #
+      # This is a best-effort early signal during the development loop. It scans
+      # the debug target, not the distroless release image, so some OS package
+      # differences may exist. The authoritative image scan runs against the pushed
+      # release image in build-image.yml.
+      #
+      # exit-code: '0' — non-blocking, same rationale as the filesystem scan.
+      - name: Scan image for vulnerabilities (best-effort)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: 'image'
+          image-ref: 'developmentloop-demo:ci'
+          vuln-type: 'os,library'
+          ignore-unfixed: true
+          exit-code: '0'
+          format: 'sarif'
+          output: 'trivy-image-results.sarif'
+          severity: 'MEDIUM,HIGH,CRITICAL'
+
+      - name: Upload image scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: 'trivy-image-results.sarif'
+          category: 'Image Scanning'

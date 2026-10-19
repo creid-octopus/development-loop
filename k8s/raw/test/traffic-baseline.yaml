@@ -1,0 +1,44 @@
+# Baseline traffic for monitoring and soak windows.
+#
+# Sends a steady request every few seconds so Datadog always has data for
+# the current version. Deployed with the app, so it comes back after the
+# demo infra is torn down and recreated.
+#
+# Bursts (errors, latency) still use tools/traffic-job.yaml as Jobs.
+# Pause: kubectl scale deploy/traffic-baseline --replicas=0 -n <namespace>
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: traffic-baseline
+  namespace: developmentloop-demo-test
+  labels:
+    app: traffic-baseline
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: traffic-baseline
+  template:
+    metadata:
+      labels:
+        app: traffic-baseline
+    spec:
+      containers:
+        - name: curl
+          image: curlimages/curl:latest
+          env:
+            - name: TARGET
+              value: "http://raw-developmentloop-demo/"
+            - name: INTERVAL_SECONDS
+              value: "2"
+          command: ["sh", "-c"]
+          args:
+            - |
+              echo "Baseline traffic to $TARGET every ${INTERVAL_SECONDS}s"
+              while true; do
+                curl -s -o /dev/null -m 5 "$TARGET" || true
+                sleep "$INTERVAL_SECONDS"
+              done
+          resources:
+            requests: { cpu: 10m, memory: 16Mi }
+            limits: { cpu: 50m, memory: 32Mi }

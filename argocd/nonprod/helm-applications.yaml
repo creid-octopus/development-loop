@@ -1,0 +1,43 @@
+# ArgoCD ApplicationSet for Helm-deployed developmentloop-demo (non-prod).
+# Single chart, per-environment valueFiles overrides.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: helm-applications
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          - name: helm-developmentloop-demo-development
+            environment: development
+            namespace: developmentloop-demo-development
+          - name: helm-developmentloop-demo-test
+            environment: test
+            namespace: developmentloop-demo-test
+  template:
+    metadata:
+      name: '{{ name }}'
+      annotations:
+        argo.octopus.com/project.pt-argocd-helm: "pt-argocd-helm"
+        argo.octopus.com/environment.pt-argocd-helm: '{{ environment }}'
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/creid-octopus/development-loop.git
+        targetRevision: HEAD
+        name: argocd-helm
+        path: k8s/helm
+        helm:
+          valueFiles:
+            - values.yaml
+            - values-{{ environment }}.yaml
+      destination:
+        namespace: '{{ namespace }}'
+        server: https://kubernetes.default.svc
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true

@@ -1,0 +1,40 @@
+# ArgoCD ApplicationSet for raw YAML manifests (production).
+# Production deploys from k8s/raw/production into its own namespace.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: raw-applications
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          - name: raw-developmentloop-demo-production
+            environment: production
+            namespace: developmentloop-demo-production
+            path: k8s/raw/production
+  template:
+    metadata:
+      name: '{{ name }}'
+      annotations:
+        argo.octopus.com/project.pt-argocd-raw-yaml: "pt-argocd-raw-yaml"
+        argo.octopus.com/environment.pt-argocd-raw-yaml: '{{ environment }}'
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/creid-octopus/development-loop.git
+        targetRevision: HEAD
+        name: argocd-raw-yaml
+        path: '{{ path }}'
+        # Baseline traffic is for the Octopus-deployed copy only
+        directory:
+          exclude: 'traffic-baseline.yaml'
+      destination:
+        namespace: '{{ namespace }}'
+        server: https://kubernetes.default.svc
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true

@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: developmentloop-demo
+  labels:
+    app: developmentloop-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: developmentloop-demo
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1       # one extra pod during rollout
+      maxUnavailable: 0  # never drop below desired count
+  template:
+    metadata:
+      labels:
+        app: developmentloop-demo
+        # Patched per environment in each overlay
+        app.kubernetes.io/environment: "default"
+      annotations:
+        ad.datadoghq.com/developmentloop-demo: |
+          checks:
+            http_check:
+              - init_config:
+                instances:
+                  - name: pod health
+                    url: "http://%%host%%:3000/health"
+                    timeout: 1
+    spec:
+      containers:
+        - name: developmentloop-demo
+          image: ghcr.io/creid-octopus/development-loop:latest
+          ports:
+            - containerPort: 3000
+          env:
+            # OpenTelemetry. The app sends OTLP to the Datadog Agent on its node.
+            # Version and environment come from APP_VERSION (image) and APP_ENV.
+            - name: HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            # Matches the deployed name after the overlays' namePrefix
+            - name: OTEL_SERVICE_NAME
+              value: "kustomize-developmentloop-demo"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://$(HOST_IP):4318"
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: "http/protobuf"
+            - name: OTEL_TRACES_EXPORTER
+              value: "otlp"
+            - name: OTEL_METRICS_EXPORTER
+              value: "otlp"
+            - name: OTEL_LOGS_EXPORTER
+              value: "none"
+            - name: OTEL_NODE_RESOURCE_DETECTORS
+              value: "env,process"
+            - name: APP_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: developmentloop-demo-config
+                  key: APP_ENV
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
