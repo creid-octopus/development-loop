@@ -76,9 +76,10 @@ A release workflow arrives in layer 2. It will push build information, add relea
 
 ### Image tags
 
-Each build produces 2 tags. There's no `latest` tag.
+Each build produces 2 tags as well as a `latest` tag for convenience.
 
 ```
+ghcr.io/creid-octopus/development-loop:latest              # semantic latest, for testing
 ghcr.io/creid-octopus/development-loop:1.0.42              # semver, for Octopus references
 ghcr.io/creid-octopus/development-loop:1.0.42-sha-a1b2c3d  # SHA-pinned, for manifests
 ```
