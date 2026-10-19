@@ -259,7 +259,7 @@ jobs:
       # Skipped on dry runs.
       - name: Log in to Octopus Deploy
         if: inputs.dry_run != true
-        uses: OctopusDeploy/login@v1
+        uses: OctopusDeploy/login@v2
         with:
           server: ${{ env.OCTOPUS_SERVER_URL }}
           service_account_id: ${{ env.OCTOPUS_SERVICE_ACCOUNT_ID }}
