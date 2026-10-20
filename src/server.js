@@ -4,8 +4,21 @@ require("./instrumentation");
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
+const { trace, SpanStatusCode } = require("@opentelemetry/api");
+const db = require("./db");
 const app = express();
 const port = process.env.PORT || 3000;
+
+app.use(express.json());
+
+// Marks the active span as failed. The HTTP instrumentation does this for 5xx
+// responses it sees. Doing it here as well makes the error rate in the back-end
+// match what the app returns, even when a response is sent from middleware.
+function markSpanError(message) {
+  const span = trace.getActiveSpan();
+  if (!span) return;
+  span.setStatus({ code: SpanStatusCode.ERROR, message });
+}
 
 // Read the .build-env file stamped by the CI "Write build metadata" step into a
 // plain object. Returns an empty object locally (file won't exist in dev).
@@ -85,6 +98,7 @@ app.use("/", (req, res, next) => {
   const s = simActive();
   const go = () => {
     if (s.errorRate > 0 && Math.random() < s.errorRate) {
+      markSpanError("Simulated failure");
       return res.status(500).send("Simulated failure");
     }
     next();
@@ -211,12 +225,68 @@ app.get("/", (req, res) => {
 </html>`);
 });
 
-// Health check endpoint (used by Kubernetes probes and Octopus health checks)
-app.get("/health", (req, res) => {
-  if (sim.degraded) return res.status(503).json({ status: "degraded", ...buildInfo });
-  res.json({ status: "ok", ...buildInfo });
+// ── Items API ─────────────────────────────────────────────────────────────
+// A small table-backed API. It exists so there is a real schema to migrate,
+// roll forward, and roll back. The table comes from db/migrations.
+function dbError(res, err) {
+  markSpanError(err.message);
+  if (err.code === "DB_NOT_CONFIGURED") {
+    return res.status(503).json({ error: "database not configured" });
+  }
+  // 42P01: table missing. Flyway has not run, or the app is newer than the schema.
+  if (err.code === "42P01" || err.code === "42703") {
+    return res.status(500).json({ error: "schema does not match the app", detail: err.message });
+  }
+  return res.status(500).json({ error: "database error", detail: err.message });
+}
+
+app.get("/api/items", async (req, res) => {
+  try {
+    const { rows } = await db.query("SELECT id, name, created_at FROM items ORDER BY id");
+    res.json(rows);
+  } catch (err) {
+    dbError(res, err);
+  }
 });
 
-app.listen(port, () => {
-  console.log(`developmentloop-demo listening on port ${port} — env: ${buildInfo.environment}`);
+app.post("/api/items", async (req, res) => {
+  const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+  if (!name) return res.status(400).json({ error: "name is required" });
+  try {
+    const { rows } = await db.query(
+      "INSERT INTO items (name) VALUES ($1) RETURNING id, name, created_at",
+      [name]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    dbError(res, err);
+  }
 });
+
+// Health check endpoint (used by Kubernetes probes and Octopus health checks).
+// The database is reported but never fails this endpoint. A database outage
+// must not make Kubernetes restart healthy pods. Use /health/db for readiness.
+app.get("/health", async (req, res) => {
+  const database = await db.status();
+  if (sim.degraded) return res.status(503).json({ status: "degraded", ...buildInfo, database });
+  res.json({ status: "ok", ...buildInfo, database });
+});
+
+// Readiness that includes the database. Returns 503 when a configured
+// database is unreachable. An unconfigured database is not a failure.
+app.get("/health/db", async (req, res) => {
+  const database = await db.status();
+  const failed = database.status === "unreachable";
+  if (failed) markSpanError("database unreachable");
+  res.status(failed ? 503 : 200).json(database);
+});
+
+const server = app.listen(port, () => {
+  const t = db.target();
+  console.log(`developmentloop-demo listening on port ${port} — env: ${buildInfo.environment}`);
+  console.log(
+    t ? `database: ${t.user}@${t.host}:${t.port}/${t.database}` : "database: not configured (set DATABASE_URL or PGHOST)"
+  );
+});
+
+module.exports = { app, server };

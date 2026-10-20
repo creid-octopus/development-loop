@@ -1,0 +1,65 @@
+# OpenTelemetry Collector for the local loop.
+#
+# The app sends OTLP here and nowhere else. To add Datadog later, add a
+# datadog exporter below and list it in the pipelines. The app does not change.
+#
+#   app --OTLP--> collector --traces--> tempo
+#                     |
+#                     +--spanmetrics--> prometheus  (request rate, errors, latency)
+#                     +--app metrics -> prometheus
+
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+processors:
+  batch:
+    timeout: 2s
+
+connectors:
+  # Turns spans into metrics. This is how Prometheus gets an error rate that
+  # matches what the app returns. Datadog builds the same numbers itself, so
+  # both back-ends agree.
+  #   traces_span_metrics_calls_total{status_code="STATUS_CODE_ERROR"} = failed requests
+  spanmetrics:
+    namespace: traces.span.metrics
+    # Default is 60s. Span metrics then lag a full minute behind traffic.
+    # 10s matches the app's own metric export interval.
+    metrics_flush_interval: 10s
+    histogram:
+      explicit:
+        buckets: [10ms, 50ms, 100ms, 250ms, 500ms, 1s, 2s, 5s]
+    dimensions:
+      - name: http.response.status_code
+      - name: http.route
+      - name: deployment.environment.name
+      - name: service.version
+
+exporters:
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+  # Prometheus scrapes this endpoint (see prometheus.yml).
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    resource_to_telemetry_conversion:
+      enabled: true
+  # Prints what arrives. Remove the line in the pipelines to quiet it.
+  debug:
+    verbosity: basic
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/tempo, spanmetrics]
+    metrics:
+      receivers: [otlp, spanmetrics]
+      processors: [batch]
+      exporters: [prometheus, debug]
