@@ -1,0 +1,19 @@
+variable "Project.Postgres.Port" {
+    value "5432" {}
+}
+
+variable "Project.Postgres.LoginRole" {
+    value "developmentloop_app_#{Helper.EnvironmentLowerCase}" {}
+}
+
+variable "Project.Postgres.Host" {
+    value "192.168.65.254" {}
+}
+
+variable "Project.Postgres.DatabaseName" {
+    value "developmentloop_#{Helper.EnvironmentLowerCase}" {}
+}
+
+variable "Helper.EnvironmentLowerCase" {
+    value "#{Octopus.Environment.Name | ToLower}" {}
+}
