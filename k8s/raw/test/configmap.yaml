@@ -5,3 +5,9 @@ metadata:
   namespace: developmentloop-demo-test
 data:
   APP_ENV: "Test"
+  # Database connection. Octopus replaces the #{...} values at deploy time.
+  # The password comes from the developmentloop-db Secret.
+  PGHOST: "#{Project.Postgres.AppHost}"
+  PGPORT: "#{Project.Postgres.Port}"
+  PGDATABASE: "#{Project.Postgres.DatabaseName}"
+  PGUSER: "#{Project.Postgres.LoginRole}"
