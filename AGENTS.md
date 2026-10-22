@@ -28,14 +28,15 @@ Update this tree when the layout changes.
 
 ## Commands
 
-Fill these in during layer 2.
-
 ```bash
-npm install
-npm test
-npm run dev
-docker compose up      # app + local dependencies
+cd src && npm install && npm test        # unit tests, no Docker
+docker compose up --build                # database, migrations, app, telemetry
+scripts/test-local.sh                    # end to end check of the local loop
+scripts/migrate.sh info                  # Flyway against DATABASE_URL, read only
+scripts/scan-migrations.sh               # scan migrations for risky SQL
 ```
+
+Local details: [`docs/local-development.md`](docs/local-development.md).
 
 ## Rules
 

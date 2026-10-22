@@ -23,5 +23,9 @@ variable "Project.Kubernetes.RepositoryUrl" {
 }
 
 variable "Project.Kubernetes.NamespaceName" {
-    value "developmentloop_#{Helper.EnvironmentLowerCase}" {}
+    value "developmentloop-demo-#{Helper.EnvironmentLowerCase}" {}
+}
+
+variable "Project.Postgres.AppHost" {
+    value "host.docker.internal" {}
 }

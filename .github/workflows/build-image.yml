@@ -23,6 +23,19 @@
 # actions/attest-build-provenance and stored in GitHub's attestation store.
 # Verify with: gh attestation verify oci://<image>:<tag> --repo <owner>/<repo>
 #
+# Octopus release: after the image is pushed, two more jobs run (skipped on dry runs).
+#   octopus-packages → packages db/migrations as a Flyway zip, pushes it, and pushes
+#                      build information for the image, SBOM, and Flyway packages
+#   release          → one job per Octopus project (matrix): creates a release at the
+#                      same version as the image, then deploys main builds to Development
+# One workflow run means one version. The image tag, the packages, and the release
+# number are all 1.0.<run>, so a release always points at the image it came from.
+# Traceability: build information carries the commit, and the release custom fields
+# GH_WORKFLOW_RUN and GIT_COMMIT_SHA link back to the run and the SHA.
+#
+# Octopus projects come from the OCTOPUS_PROJECTS repo variable (a JSON list of
+# project names). When it is unset the three PT - ArgoCD projects are used.
+#
 # Future: replace attestation with cosign sign for registry-agnostic signatures.
 
 name: Build image
@@ -72,6 +85,10 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}   # e.g. cory/sample-webapp → ghcr.io/cory/sample-webapp
   SBOM_PACKAGE: developmentloop-sbom
+  FLYWAY_PACKAGE: developmentloop-flyway
+  # Octopus package ID of the container image. Octopus names a Docker image
+  # package by its path without the registry, e.g. creid-octopus/development-loop.
+  IMAGE_PACKAGE_ID: ${{ github.repository }}
   # Octopus OIDC login. Neither value is a secret: the service account only
   # trusts tokens issued to this repo, as configured in Octopus.
   OCTOPUS_SERVER_URL: https://creid.octopus.app
@@ -83,6 +100,11 @@ jobs:
   build:
     name: Build & push image
     runs-on: ubuntu-latest
+    # The later jobs reuse these so every artifact carries the same version.
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      is_release: ${{ steps.meta.outputs.is_release }}
+      image_ref: ${{ steps.meta.outputs.image_ref }}
 
     steps:
       - uses: actions/checkout@v7
@@ -339,3 +361,103 @@ jobs:
               echo "| **Pushed** | dry run — skipped |"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # ── Octopus packages ───────────────────────────────────────────────────────
+  # Runs once per workflow run. Packages the migrations and pushes build
+  # information so every package version links back to this commit and run.
+  # The SBOM and the image were already pushed by the build job.
+  octopus-packages:
+    name: Push Octopus packages
+    needs: build
+    if: inputs.dry_run != true
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # Zip of db/migrations. Nothing in Octopus references this package yet.
+      # The database process templates will. Pushing it now means the first
+      # release that references it already has a version to find.
+      - name: Package Flyway migrations
+        id: flyway_package
+        uses: OctopusDeploy/create-zip-package-action@v4
+        with:
+          package_id: '${{ env.FLYWAY_PACKAGE }}'
+          version: '${{ needs.build.outputs.version }}'
+          output_folder: './packaging'
+          base_path: 'db/migrations'
+          files: '*.sql'
+
+      - name: Log in to Octopus Deploy
+        uses: OctopusDeploy/login@v2
+        with:
+          server: ${{ env.OCTOPUS_SERVER_URL }}
+          service_account_id: ${{ env.OCTOPUS_SERVICE_ACCOUNT_ID }}
+
+      - name: Push Flyway package to Octopus
+        uses: OctopusDeploy/push-package-action@v4
+        with:
+          space: ${{ secrets.OCTOPUS_SPACE }}
+          packages: ${{ steps.flyway_package.outputs.package_file_path }}
+          overwrite_mode: OverwriteExisting
+
+      # Build information is matched to a package by ID and version. It carries
+      # the commit, branch, and workflow run. Octopus shows it on the release.
+      - name: Push build information
+        uses: OctopusDeploy/push-build-information-action@v4
+        with:
+          space: ${{ secrets.OCTOPUS_SPACE }}
+          packages: |
+            ${{ env.IMAGE_PACKAGE_ID }}
+            ${{ env.SBOM_PACKAGE }}
+            ${{ env.FLYWAY_PACKAGE }}
+          version: ${{ needs.build.outputs.version }}
+          overwrite_mode: OverwriteExisting
+
+  # ── Octopus release ────────────────────────────────────────────────────────
+  # One job per Octopus project. fail-fast is off so a project that does not
+  # exist yet does not stop the others.
+  release:
+    name: Release to ${{ matrix.project }}
+    needs: [build, octopus-packages]
+    if: inputs.dry_run != true
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Override with a repo variable, for example:
+        #   ["PT - ArgoCD - Raw YAML"]
+        project: ${{ fromJSON(vars.OCTOPUS_PROJECTS || '["PT - ArgoCD - Raw YAML","PT - ArgoCD - Kustomize","PT - ArgoCD - Helm"]') }}
+
+    steps:
+      - name: Log in to Octopus Deploy
+        uses: OctopusDeploy/login@v2
+        with:
+          server: ${{ env.OCTOPUS_SERVER_URL }}
+          service_account_id: ${{ env.OCTOPUS_SERVICE_ACCOUNT_ID }}
+
+      # package_version applies to every package in the project, so the image,
+      # SBOM, and Flyway packages all resolve to this run's version.
+      # ignore_existing makes "Re-run jobs" safe: the release number is the
+      # version, and a re-run reuses it instead of failing.
+      - name: Create Octopus release
+        uses: OctopusDeploy/create-release-action@v4
+        with:
+          space: ${{ secrets.OCTOPUS_SPACE }}
+          project: ${{ matrix.project }}
+          package_version: ${{ needs.build.outputs.version }}
+          release_number: ${{ needs.build.outputs.version }}
+          ignore_existing: true
+          custom_fields: |
+            GH_WORKFLOW_RUN:${{ github.run_id }}
+            GIT_COMMIT_SHA:${{ github.sha }}
+
+      # Main builds go to Development. Promotion after that is Octopus's job.
+      - name: Deploy to Development
+        if: needs.build.outputs.is_release == 'true'
+        uses: OctopusDeploy/deploy-release-action@v4
+        with:
+          space: ${{ secrets.OCTOPUS_SPACE }}
+          project: ${{ matrix.project }}
+          release_number: ${{ needs.build.outputs.version }}
+          environments: Development

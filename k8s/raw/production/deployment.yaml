@@ -67,6 +67,34 @@ spec:
                 configMapKeyRef:
                   name: raw-developmentloop-demo-config
                   key: APP_ENV
+            # Database connection. Host, port, database, and user come from the
+            # ConfigMap. The password comes from the developmentloop-db Secret,
+            # which the secrets/ step applies before this deployment.
+            - name: PGHOST
+              valueFrom:
+                configMapKeyRef:
+                  name: raw-developmentloop-demo-config
+                  key: PGHOST
+            - name: PGPORT
+              valueFrom:
+                configMapKeyRef:
+                  name: raw-developmentloop-demo-config
+                  key: PGPORT
+            - name: PGDATABASE
+              valueFrom:
+                configMapKeyRef:
+                  name: raw-developmentloop-demo-config
+                  key: PGDATABASE
+            - name: PGUSER
+              valueFrom:
+                configMapKeyRef:
+                  name: raw-developmentloop-demo-config
+                  key: PGUSER
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: developmentloop-db
+                  key: PGPASSWORD
           resources:
             requests:
               cpu: 100m
@@ -83,7 +111,7 @@ spec:
             failureThreshold: 3
           readinessProbe:
             httpGet:
-              path: /health
+              path: /health/db
               port: 3000
             initialDelaySeconds: 5
             periodSeconds: 10

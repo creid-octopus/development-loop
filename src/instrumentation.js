@@ -2,12 +2,13 @@
 // http and express before they are required.
 //
 // Everything vendor-specific lives in OTEL_* environment variables, not code.
-// The app only knows "send OTLP somewhere". Today that is the Datadog Agent on
-// the node. Later it can be an OTel Collector that fans out to Datadog and
-// Prometheus, with no code change.
+// The app only knows "send OTLP somewhere". Locally that is an OpenTelemetry
+// Collector that feeds Prometheus, Tempo, and Grafana. In Kubernetes it is still
+// the Datadog Agent on the node until the Collector is deployed there. Moving
+// from one to the other is a change to OTEL_EXPORTER_OTLP_ENDPOINT, not code.
 //
-// Key env vars (set in the Kubernetes manifest):
-//   OTEL_SERVICE_NAME              service name shown in Datadog
+// Key env vars (set in docker-compose.yml or the Kubernetes manifest):
+//   OTEL_SERVICE_NAME              service name shown in the back-end
 //   OTEL_EXPORTER_OTLP_ENDPOINT    e.g. http://$(HOST_IP):4318
 //   OTEL_EXPORTER_OTLP_PROTOCOL    http/protobuf
 //   OTEL_TRACES_EXPORTER           otlp
@@ -26,7 +27,7 @@ const { ExpressInstrumentation } = require("@opentelemetry/instrumentation-expre
 
 // Version is baked into the image at build time (APP_VERSION).
 // Environment comes from the ConfigMap (APP_ENV).
-// These become Datadog's "version" and "env" tags.
+// These become the "version" and "env" labels in Grafana and Datadog.
 const environment = (process.env.APP_ENV || "local").toLowerCase();
 const resource = resourceFromAttributes({
   "service.version": process.env.APP_VERSION || "0.0.0-local",

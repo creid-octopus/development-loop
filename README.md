@@ -6,7 +6,7 @@ The service is the reference app for that golden path. It brings together severa
 
 The work is planned in layers. See [`agent-files/plan.md`](agent-files/plan.md) for the full plan. Each layer leaves a demo that works.
 
-> **Status:** setup. The Kubernetes delivery paths came over from the v1 repo. The Postgres database, Flyway migrations, and the OpenTelemetry Collector arrive in layer 2.
+> **Status:** layer 2, local first. The app, Postgres, Flyway migrations, and the local Grafana stack run with `docker compose up`. The Kubernetes manifests do not use the database yet. The Octopus process templates for the database come next.
 
 ## How it fits together
 
@@ -38,7 +38,13 @@ The `nonprod` ApplicationSets cover Development and Test. The `prod` Application
 │   ├── server.js         # build info at /, /health, and /simulate/* failure endpoints
 │   └── instrumentation.js  # OpenTelemetry SDK setup (OTLP over HTTP)
 ├── db/
-│   └── migrations/       # Flyway migrations (layer 2)
+│   ├── migrations/       # Flyway migrations (V1 to V3)
+│   └── test-fixtures/    # risky SQL used to test the scan script. Never deployed
+├── scripts/
+│   ├── migrate.sh        # Flyway Community against any Postgres
+│   ├── scan-migrations.sh  # text scan for risky SQL
+│   └── test-local.sh     # checks the local loop end to end
+├── observability/        # Collector, Prometheus, Tempo, and Grafana config
 ├── Dockerfile            # multi-stage: --target debug (node:24-slim)
 │                         #              --target release (distroless)
 ├── k8s/                  # manifests: raw/, kustomize/, helm/
@@ -114,15 +120,23 @@ docker build --target release -t developmentloop-demo:local .
 docker run -p 3000:3000 -e APP_ENV=local developmentloop-demo:local
 ```
 
-Run the app with telemetry:
+Run the whole loop (database, migrations, app, and telemetry):
 
 ```bash
-cp .env.example .env    # add your values
-docker compose up --build
-docker compose --profile traffic up traffic   # optional steady traffic
+docker compose up --build                       # no .env file needed
+scripts/test-local.sh                           # checks each piece and explains failures
+docker compose --profile traffic up traffic     # optional steady traffic
 ```
 
-The compose file still uses the Datadog Agent. Layer 2 replaces it with an OpenTelemetry Collector that feeds Prometheus, Tempo, and Grafana.
+Open the app at `http://localhost:3001` and Grafana at `http://localhost:3100`.
+
+The app reads its database from `DATABASE_URL`. Pointing it at another database is a change of environment, not code. See [`docs/local-development.md`](docs/local-development.md) for what each service does, how to swap the database, and how to fix common failures.
+
+Run the unit tests (no Docker needed):
+
+```bash
+cd src && npm test
+```
 
 ## Failure simulation
 

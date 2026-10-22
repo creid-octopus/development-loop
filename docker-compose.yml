@@ -1,34 +1,68 @@
-# Local OpenTelemetry + Datadog loop.
+# Local development loop. Everything the demo app needs, on your machine.
 #
-# Runs the app (debug image) next to a real Datadog Agent, with the same
-# OTEL_* settings the Kubernetes manifests use. Only the endpoint differs:
-# here the agent is "dd-agent", in AKS it's the node's HOST_IP.
+#   postgres    the database (port 5433 on the host)
+#   flyway      applies db/migrations once, then exits
+#   app         the service. It starts only after Flyway succeeds
+#   collector   receives OpenTelemetry data from the app
+#   prometheus  stores metrics. Includes error rate computed from spans
+#   tempo       stores traces
+#   grafana     shows both (http://localhost:3100, no login)
 #
-# Setup:   cp .env.example .env   (then add your DD_API_KEY)
-# Start:   docker compose up --build
-# Traffic: docker compose --profile traffic up traffic
-# Check:   docker compose exec dd-agent agent status | grep -A12 -E "OTLP|APM Agent"
-# Stop:    docker compose down
+# Start:    docker compose up --build
+# Stop:     docker compose down            (keeps the database)
+# Reset:    docker compose down -v         (deletes the database and metrics)
+# Traffic:  docker compose --profile traffic up traffic
+# Test:     scripts/test-local.sh
+#
+# The app reads its database from DATABASE_URL. To use a different database,
+# set DATABASE_URL (or PGHOST and friends) and skip the postgres and flyway
+# services. Nothing else changes. See README.md.
+#
+# Passwords below are for local use only. They are defaults, not secrets.
 #
 # Debugging: src/ is mounted and the app runs under `node --watch --inspect`.
 # Edits restart the app. Attach a debugger to localhost:9229.
 
 services:
-  dd-agent:
-    image: gcr.io/datadoghq/agent:7
+  postgres:
+    image: postgres:17
     environment:
-      DD_API_KEY: ${DD_API_KEY:?Set DD_API_KEY in .env}
-      DD_SITE: ${DD_SITE:-datadoghq.com}
-      DD_HOSTNAME: developmentloop-local
-      DD_APM_ENABLED: "true"
-      DD_APM_NON_LOCAL_TRAFFIC: "true"
-      DD_OTLP_CONFIG_RECEIVER_PROTOCOLS_HTTP_ENDPOINT: 0.0.0.0:4318
-      DD_OTLP_CONFIG_RECEIVER_PROTOCOLS_GRPC_ENDPOINT: 0.0.0.0:4317
-      DD_LOGS_ENABLED: "false"
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-app}
+      POSTGRES_DB: developmentloop
+    ports:
+      # 5433 so it does not clash with the local-workloads Postgres on 5432.
+      - "5433:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "agent", "health"]
-      interval: 10s
-      retries: 6
+      test: ["CMD-SHELL", "pg_isready -U app -d developmentloop"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  # One-shot migration. Same image and arguments scripts/migrate.sh uses.
+  flyway:
+    # The Octopus execution container image for Flyway. A later process template
+    # runs the same tool. Docker Desktop emulates amd64 on Apple Silicon if the
+    # image has no arm64 build. Set FLYWAY_PLATFORM=linux/arm64 if it does.
+    image: ${FLYWAY_IMAGE:-octopuslabs/flyway-workertools:latest}
+    platform: ${FLYWAY_PLATFORM:-linux/amd64}
+    # Explicit, so any image with Flyway on its PATH works.
+    entrypoint: ["flyway"]
+    command:
+      - -url=jdbc:postgresql://postgres:5432/developmentloop
+      - -user=app
+      - -locations=filesystem:/flyway/sql
+      - -connectRetries=10
+      - migrate
+    environment:
+      FLYWAY_PASSWORD: ${POSTGRES_PASSWORD:-app}
+    volumes:
+      - ./db/migrations:/flyway/sql:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   app:
     build:
@@ -47,24 +81,76 @@ services:
       - /app/node_modules   # keep the image's node_modules, not the host's
     environment:
       APP_ENV: ${APP_ENV:-local-otel}
+      # Set DATABASE_URL in your shell to use a different database. Inside the
+      # container "localhost" is the container itself. Use host.docker.internal.
+      DATABASE_URL: ${DATABASE_URL:-postgres://app:app@postgres:5432/developmentloop}
+      # Same service name the Kubernetes raw manifests use.
       OTEL_SERVICE_NAME: raw-developmentloop-demo
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://dd-agent:4318
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://collector:4318
       OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
       OTEL_TRACES_EXPORTER: otlp
       OTEL_METRICS_EXPORTER: otlp
       OTEL_LOGS_EXPORTER: none
-      # Skip the "host" detector so the agent sets the hostname (see manifests)
-      OTEL_NODE_RESOURCE_DETECTORS: env,process
       # Faster feedback than the 60s default
       OTEL_METRIC_EXPORT_INTERVAL: "10000"
     depends_on:
-      dd-agent:
-        condition: service_healthy
+      flyway:
+        condition: service_completed_successfully
+      collector:
+        condition: service_started
+
+  collector:
+    image: otel/opentelemetry-collector-contrib:0.119.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./observability/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - "4318:4318"   # OTLP over HTTP, for running the app outside Docker
+    depends_on:
+      - tempo
+
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=2d"]
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+
+  tempo:
+    image: grafana/tempo:2.7.0
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
+    user: root   # local named volume is root-owned
+    volumes:
+      - ./observability/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo-data:/var/tempo
+
+  grafana:
+    image: grafana/grafana:11.5.0
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    volumes:
+      - ./observability/grafana/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
+      - ./observability/grafana/dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3100:3000"
+    depends_on:
+      - prometheus
+      - tempo
 
   # Optional steady traffic: docker compose --profile traffic up traffic
   traffic:
     profiles: ["traffic"]
     image: curlimages/curl:latest
     entrypoint: ["/bin/sh", "-c"]
-    command: ["while true; do curl -s -o /dev/null -w '%{http_code} ' http://app:3000/; sleep 1; done"]
+    command: ["while true; do curl -s -o /dev/null -w '%{http_code} ' http://app:3000/; curl -s -o /dev/null http://app:3000/api/items; sleep 1; done"]
     depends_on: [app]
+
+volumes:
+  postgres-data:
+  prometheus-data:
+  tempo-data:

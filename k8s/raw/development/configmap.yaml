@@ -6,3 +6,9 @@ metadata:
 data:
   # property-like keys; each key maps to a simple value
   APP_ENV: "Development"
+  # Database connection. Octopus replaces the #{...} values at deploy time.
+  # The password comes from the developmentloop-db Secret.
+  PGHOST: "#{Project.Postgres.AppHost}"
+  PGPORT: "#{Project.Postgres.Port}"
+  PGDATABASE: "#{Project.Postgres.DatabaseName}"
+  PGUSER: "#{Project.Postgres.LoginRole}"
