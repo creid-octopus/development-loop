@@ -17,3 +17,11 @@ variable "Project.Postgres.DatabaseName" {
 variable "Helper.EnvironmentLowerCase" {
     value "#{Octopus.Environment.Name | ToLower}" {}
 }
+
+variable "Project.Kubernetes.RepositoryUrl" {
+    value "https://github.com/creid-octopus/development-loop" {}
+}
+
+variable "Project.Kubernetes.NamespaceName" {
+    value "developmentloop_#{Helper.EnvironmentLowerCase}" {}
+}
