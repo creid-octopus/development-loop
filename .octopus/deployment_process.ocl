@@ -9,10 +9,6 @@ process_template "create-postgres-user" {
     process_template_slug = "postgres-create-user-if-not-exists"
     version_mask = "PreRelease"
 
-    parameter "Postgres.TargetRole" {
-        value = "k8s-agent"
-    }
-
     parameter "Postgres.Server.Host" {
         value = "#{Project.Postgres.Host}"
     }
@@ -28,16 +24,16 @@ process_template "create-postgres-user" {
     parameter "Postgres.Login.Password" {
         value = "#{Project.Postgres.LoginPassword}"
     }
+
+    parameter "Postgres.TargetRole" {
+        value = "local-postgres"
+    }
 }
 
 process_template "create-postgres-database" {
     name = "Create Postgres Database"
     process_template_slug = "postgres-create-database-if-not-exists"
     version_mask = "PreRelease"
-
-    parameter "Postgres.TargetRole" {
-        value = "k8s-agent"
-    }
 
     parameter "Postgres.Server.Host" {
         value = "#{Project.Postgres.Host}"
@@ -53,6 +49,10 @@ process_template "create-postgres-database" {
 
     parameter "Postgres.Database.Owner" {
         value = "#{Project.Postgres.LoginRole}"
+    }
+
+    parameter "Postgres.TargetRole" {
+        value = "local-postgres"
     }
 }
 
