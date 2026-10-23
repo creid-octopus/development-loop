@@ -41,7 +41,7 @@ process_template "verify-database-ready" {
 process_template "run-flyway-migrations" {
     name = "Run Flyway migrations"
     process_template_slug = "postgres-apply-flyway-migrations"
-    version_mask = "PreRelease"
+    version_mask = "1.X"
 
     package_parameter "Postgres.Migrations.Package" {
         feed = "octopus-server-built-in"
