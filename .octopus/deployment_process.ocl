@@ -117,7 +117,7 @@ process_template "create-application-secrets" {
     package_parameter "KubernetesYaml.DeploymentImage" {
         feed = "octopus-server-built-in"
         package_id = "octopus_base_package"
-        version = "1.0"
+        version = "1.0.13"
     }
 
     parameter "KubernetesYaml.NamespaceTarget" {
