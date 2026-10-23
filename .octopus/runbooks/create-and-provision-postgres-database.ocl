@@ -94,7 +94,7 @@ process {
     process_template "grant-app-access" {
         name = "Grant app access"
         process_template_slug = "postgres-grant-app-access"
-        version_mask = "PreRelease"
+        version_mask = "1.X"
 
         parameter "Postgres.TargetRole" {
             value = "local-postgres"
@@ -124,7 +124,7 @@ process {
     process_template "verify-app-access" {
         name = "Verify app access"
         process_template_slug = "postgres-verify-app-access"
-        version_mask = "PreRelease"
+        version_mask = "1.X"
 
         parameter "Postgres.TargetRole" {
             value = "local-postgres"

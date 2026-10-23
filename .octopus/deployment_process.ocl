@@ -7,7 +7,7 @@ process_template "predeploy-notification" {
 process_template "verify-database-ready" {
     name = "Verify database ready"
     process_template_slug = "postgres-verify-app-access"
-    version_mask = "PreRelease"
+    version_mask = "1.X"
 
     parameter "Postgres.TargetRole" {
         value = "local-postgres"
