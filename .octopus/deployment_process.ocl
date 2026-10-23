@@ -114,6 +114,12 @@ process_template "create-application-secrets" {
     process_template_slug = "kubectl-deploy-manifests-from-git"
     version_mask = "1.X"
 
+    package_parameter "KubernetesYaml.DeploymentImage" {
+        feed = "octopus-server-built-in"
+        package_id = "octopus_base_package"
+        version = "1.0"
+    }
+
     parameter "KubernetesYaml.NamespaceTarget" {
         value = "#{Project.Kubernetes.NamespaceName}"
     }
