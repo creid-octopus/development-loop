@@ -4,36 +4,14 @@ process_template "predeploy-notification" {
     version_mask = "5.X"
 }
 
-process_template "create-postgres-user" {
-    name = "Create Postgres user"
-    process_template_slug = "postgres-create-user-if-not-exists"
+process_template "verify-database-ready" {
+    name = "Verify database ready"
+    process_template_slug = "postgres-verify-app-access"
     version_mask = "PreRelease"
-
-    parameter "Postgres.Server.Host" {
-        value = "#{Project.Postgres.Host}"
-    }
-
-    parameter "Postgres.Server.Port" {
-        value = "#{Project.Postgres.Port}"
-    }
-
-    parameter "Postgres.Login.Username" {
-        value = "#{Project.Postgres.LoginRole}"
-    }
-
-    parameter "Postgres.Login.Password" {
-        value = "#{Project.Postgres.LoginPassword}"
-    }
 
     parameter "Postgres.TargetRole" {
         value = "local-postgres"
     }
-}
-
-process_template "create-postgres-database" {
-    name = "Create Postgres Database"
-    process_template_slug = "postgres-create-database-if-not-exists"
-    version_mask = "PreRelease"
 
     parameter "Postgres.Server.Host" {
         value = "#{Project.Postgres.Host}"
@@ -48,11 +26,15 @@ process_template "create-postgres-database" {
     }
 
     parameter "Postgres.Database.Owner" {
-        value = "#{Project.Postgres.LoginRole}"
+        value = "#{Project.Postgres.OwnerRole}"
     }
 
-    parameter "Postgres.TargetRole" {
-        value = "local-postgres"
+    parameter "Postgres.App.Username" {
+        value = "#{Project.Postgres.AppRole}"
+    }
+
+    parameter "Postgres.App.Password" {
+        value = "#{Project.Postgres.AppPassword}"
     }
 }
 
@@ -75,11 +57,11 @@ process_template "run-flyway-migrations" {
     }
 
     parameter "Postgres.Migration.Password" {
-        value = "#{Project.Postgres.LoginPassword}"
+        value = "#{Project.Postgres.OwnerPassword}"
     }
 
     parameter "Postgres.Migration.Username" {
-        value = "#{Project.Postgres.LoginRole}"
+        value = "#{Project.Postgres.OwnerRole}"
     }
 
     parameter "Postgres.Worker.Pool" {

@@ -6,3 +6,7 @@ namespace: developmentloop-demo-production
 appEnv: Production
 
 image: ghcr.io/creid-octopus/development-loop:latest
+
+database:
+  name: developmentloop_production
+  user: developmentloop_app_production

@@ -62,6 +62,36 @@ spec:
                 configMapKeyRef:
                   name: developmentloop-demo-config
                   key: APP_ENV
+            # Database connection. Host, port, database, and user come from the
+            # ConfigMap, patched per environment in each overlay. The password comes
+            # from the developmentloop-db Secret. Octopus creates that Secret before
+            # the app deploys. The Secret is not part of this kustomization, so
+            # namePrefix does not rename it.
+            - name: PGHOST
+              valueFrom:
+                configMapKeyRef:
+                  name: developmentloop-demo-config
+                  key: PGHOST
+            - name: PGPORT
+              valueFrom:
+                configMapKeyRef:
+                  name: developmentloop-demo-config
+                  key: PGPORT
+            - name: PGDATABASE
+              valueFrom:
+                configMapKeyRef:
+                  name: developmentloop-demo-config
+                  key: PGDATABASE
+            - name: PGUSER
+              valueFrom:
+                configMapKeyRef:
+                  name: developmentloop-demo-config
+                  key: PGUSER
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: developmentloop-db
+                  key: PGPASSWORD
           resources:
             requests:
               cpu: 100m
@@ -78,7 +108,7 @@ spec:
             failureThreshold: 3
           readinessProbe:
             httpGet:
-              path: /health
+              path: /health/db
               port: 3000
             initialDelaySeconds: 5
             periodSeconds: 10

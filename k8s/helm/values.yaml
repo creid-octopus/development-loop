@@ -13,11 +13,23 @@ appEnv: Development
 containerPort: 3000
 servicePort: 80
 probePath: /health
+# Readiness includes the database. Liveness stays on probePath.
+readinessProbePath: /health/db
 
 requestsCpu: 100m
 requestsMemory: 128Mi
 limitsCpu: 250m
 limitsMemory: 256Mi
+
+# Database connection. The password comes from the Secret named below. Octopus
+# creates that Secret before the app deploys. Per-environment files set name and user.
+database:
+  host: host.docker.internal
+  port: 5432
+  name: developmentloop
+  user: developmentloop_app
+  passwordSecretName: developmentloop-db
+  passwordSecretKey: PGPASSWORD
 
 # OpenTelemetry export to the Datadog Agent's OTLP host port.
 otel:

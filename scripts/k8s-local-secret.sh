@@ -12,7 +12,7 @@
 set -euo pipefail
 
 ENVIRONMENT="${1:-development}"
-: "${DB_PASSWORD:?Set DB_PASSWORD to the value of Project.Postgres.LoginPassword}"
+: "${DB_PASSWORD:?Set DB_PASSWORD to the value of Project.Postgres.AppPassword}"
 DB_HOST="${DB_HOST:-host.docker.internal}"
 DB_PORT="${DB_PORT:-5432}"
 DB_NAME="${DB_NAME:-test_db_${ENVIRONMENT}}"

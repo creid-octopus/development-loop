@@ -2,7 +2,7 @@ name = "Create and Provision Postgres database"
 cancel_queued_tasks = true
 cancel_running_tasks = true
 default_guided_failure_mode = "EnvironmentDefault"
-description = "Creates the postgres role and database. Also grants permissions to the app role for database actions."
+description = "Creates the Postgres roles and database. Also grants permissions to the app role for database actions. Safe to rerun: existing resources are kept, passwords are reset to the project values, and grants are reapplied. Run it once in each environment before the first deployment."
 
 connectivity_policy {
     allow_deployments_to_no_targets = true
@@ -12,4 +12,146 @@ run_retention_policy {
     type = "Default"
 }
 
-process {}
+process {
+    process_template "create-owner-role" {
+        name = "Create owner role"
+        process_template_slug = "postgres-create-user-if-not-exists"
+        version_mask = "PreRelease"
+
+        parameter "Postgres.TargetRole" {
+            value = "local-postgres"
+        }
+
+        parameter "Postgres.Server.Host" {
+            value = "#{Project.Postgres.Host}"
+        }
+
+        parameter "Postgres.Server.Port" {
+            value = "#{Project.Postgres.Port}"
+        }
+
+        parameter "Postgres.Login.Username" {
+            value = "#{Project.Postgres.OwnerRole}"
+        }
+
+        parameter "Postgres.Login.Password" {
+            value = "#{Project.Postgres.OwnerPassword}"
+        }
+    }
+
+    process_template "create-app-role" {
+        name = "Create app role"
+        process_template_slug = "postgres-create-user-if-not-exists"
+        version_mask = "PreRelease"
+
+        parameter "Postgres.TargetRole" {
+            value = "local-postgres"
+        }
+
+        parameter "Postgres.Server.Host" {
+            value = "#{Project.Postgres.Host}"
+        }
+
+        parameter "Postgres.Server.Port" {
+            value = "#{Project.Postgres.Port}"
+        }
+
+        parameter "Postgres.Login.Username" {
+            value = "#{Project.Postgres.AppRole}"
+        }
+
+        parameter "Postgres.Login.Password" {
+            value = "#{Project.Postgres.AppPassword}"
+        }
+    }
+
+    process_template "create-database" {
+        name = "Create database"
+        process_template_slug = "postgres-create-database-if-not-exists"
+        version_mask = "PreRelease"
+
+        parameter "Postgres.TargetRole" {
+            value = "local-postgres"
+        }
+
+        parameter "Postgres.Server.Host" {
+            value = "#{Project.Postgres.Host}"
+        }
+
+        parameter "Postgres.Server.Port" {
+            value = "#{Project.Postgres.Port}"
+        }
+
+        parameter "Postgres.Database.Name" {
+            value = "#{Project.Postgres.DatabaseName}"
+        }
+
+        parameter "Postgres.Database.Owner" {
+            value = "#{Project.Postgres.OwnerRole}"
+        }
+    }
+
+    process_template "grant-app-access" {
+        name = "Grant app access"
+        process_template_slug = "postgres-grant-app-access"
+        version_mask = "PreRelease"
+
+        parameter "Postgres.TargetRole" {
+            value = "local-postgres"
+        }
+
+        parameter "Postgres.Server.Host" {
+            value = "#{Project.Postgres.Host}"
+        }
+
+        parameter "Postgres.Server.Port" {
+            value = "#{Project.Postgres.Port}"
+        }
+
+        parameter "Postgres.Database.Name" {
+            value = "#{Project.Postgres.DatabaseName}"
+        }
+
+        parameter "Postgres.Database.Owner" {
+            value = "#{Project.Postgres.OwnerRole}"
+        }
+
+        parameter "Postgres.App.Role" {
+            value = "#{Project.Postgres.AppRole}"
+        }
+    }
+
+    process_template "verify-app-access" {
+        name = "Verify app access"
+        process_template_slug = "postgres-verify-app-access"
+        version_mask = "PreRelease"
+
+        parameter "Postgres.TargetRole" {
+            value = "local-postgres"
+        }
+
+        parameter "Postgres.Server.Host" {
+            value = "#{Project.Postgres.Host}"
+        }
+
+        parameter "Postgres.Server.Port" {
+            value = "#{Project.Postgres.Port}"
+        }
+
+        parameter "Postgres.Database.Name" {
+            value = "#{Project.Postgres.DatabaseName}"
+        }
+
+        parameter "Postgres.Database.Owner" {
+            value = "#{Project.Postgres.OwnerRole}"
+        }
+
+        parameter "Postgres.App.Username" {
+            value = "#{Project.Postgres.AppRole}"
+        }
+
+        parameter "Postgres.App.Password" {
+            value = "#{Project.Postgres.AppPassword}"
+        }
+    }
+}

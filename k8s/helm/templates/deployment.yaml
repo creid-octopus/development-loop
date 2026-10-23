@@ -39,6 +39,32 @@ spec:
                 configMapKeyRef:
                   name: {{ .Values.configMapName }}
                   key: APP_ENV
+            # Database connection. The password comes from the Secret that Octopus creates.
+            - name: PGHOST
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ .Values.configMapName }}
+                  key: PGHOST
+            - name: PGPORT
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ .Values.configMapName }}
+                  key: PGPORT
+            - name: PGDATABASE
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ .Values.configMapName }}
+                  key: PGDATABASE
+            - name: PGUSER
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ .Values.configMapName }}
+                  key: PGUSER
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.passwordSecretName }}
+                  key: {{ .Values.database.passwordSecretKey }}
             {{- if .Values.otel.enabled }}
             # OpenTelemetry. The app sends OTLP to the Datadog Agent on its node.
             # Version and environment come from APP_VERSION (image) and APP_ENV.
@@ -80,7 +106,7 @@ spec:
             failureThreshold: {{ .Values.livenessFailureThreshold }}
           readinessProbe:
             httpGet:
-              path: {{ .Values.probePath }}
+              path: {{ .Values.readinessProbePath }}
               port: {{ .Values.containerPort }}
             initialDelaySeconds: {{ .Values.readinessInitialDelaySeconds }}
             periodSeconds: {{ .Values.readinessPeriodSeconds }}

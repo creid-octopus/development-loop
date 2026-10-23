@@ -4,3 +4,8 @@ metadata:
   name: developmentloop-demo-config
 data:
   APP_ENV: "Development"
+  # Database connection. Overlays patch PGDATABASE and PGUSER for each environment.
+  PGHOST: "host.docker.internal"
+  PGPORT: "5432"
+  PGDATABASE: "developmentloop"
+  PGUSER: "developmentloop_app"

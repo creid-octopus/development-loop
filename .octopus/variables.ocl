@@ -2,7 +2,11 @@ variable "Project.Postgres.Port" {
     value "5432" {}
 }
 
-variable "Project.Postgres.LoginRole" {
+variable "Project.Postgres.OwnerRole" {
+    value "developmentloop_owner_#{Helper.EnvironmentLowerCase}" {}
+}
+
+variable "Project.Postgres.AppRole" {
     value "developmentloop_app_#{Helper.EnvironmentLowerCase}" {}
 }
 

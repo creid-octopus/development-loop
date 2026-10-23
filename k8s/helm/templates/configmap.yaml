@@ -6,3 +6,8 @@ metadata:
 data:
   # property-like keys; each key maps to a simple value
   APP_ENV: {{ .Values.appEnv | quote }}
+  # Database connection. The password comes from a Secret, not from here.
+  PGHOST: {{ .Values.database.host | quote }}
+  PGPORT: {{ .Values.database.port | quote }}
+  PGDATABASE: {{ .Values.database.name | quote }}
+  PGUSER: {{ .Values.database.user | quote }}

@@ -11,4 +11,4 @@ data:
   PGHOST: "#{Project.Postgres.AppHost}"
   PGPORT: "#{Project.Postgres.Port}"
   PGDATABASE: "#{Project.Postgres.DatabaseName}"
-  PGUSER: "#{Project.Postgres.LoginRole}"
+  PGUSER: "#{Project.Postgres.AppRole}"

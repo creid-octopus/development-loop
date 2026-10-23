@@ -17,6 +17,12 @@ patches:
       - op: replace
         path: /data/APP_ENV
         value: "Production"
+      - op: replace
+        path: /data/PGDATABASE
+        value: "developmentloop_production"
+      - op: replace
+        path: /data/PGUSER
+        value: "developmentloop_app_production"
 
   # Environment label on the app pods
   - target:
