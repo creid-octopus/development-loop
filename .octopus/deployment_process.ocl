@@ -1,7 +1,7 @@
 process_template "predeploy-notification" {
     name = "Predeploy Notification"
     process_template_slug = "notifications-postdeploy"
-    version_mask = "4.X"
+    version_mask = "5.X"
 }
 
 process_template "create-postgres-user" {
@@ -175,5 +175,5 @@ process_template "deploy-developmentloop" {
 process_template "postdeploy-notification" {
     name = "Postdeploy Notification"
     process_template_slug = "notifications-postdeploy"
-    version_mask = "4.X"
+    version_mask = "5.X"
 }
