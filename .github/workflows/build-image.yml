@@ -1,4 +1,4 @@
-# Container image build — builds and pushes to GHCR on src/** or Dockerfile changes.
+# Container image build — builds and pushes to GHCR on src/**, db/migrations/**, or Dockerfile changes.
 #
 # Trigger behaviour:
 #   main (push, src/** or Dockerfile) → release target (distroless), stable version, auto-attested
@@ -46,6 +46,7 @@ on:
       - main
     paths:
       - "src/**"
+      - "db/migrations/**"
       - "Dockerfile"
       - ".dockerignore"
 

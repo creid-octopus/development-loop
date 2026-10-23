@@ -1,4 +1,4 @@
-# Continuous integration — runs on every push and pull request.
+# Continuous integration — runs on pull requests.
 #
 # Proves the code builds correctly. No side-effects outside this repository.
 # The image is built but not pushed — a passing run means the Dockerfile and
@@ -10,9 +10,8 @@
 name: CI
 
 on:
-  push:
-    branches:
-      - main
+  # Pull requests only. A merge to main runs Build Image, which builds the same
+  # image and pushes it. Running CI on that push as well would repeat the work.
   pull_request:
 
 permissions:
