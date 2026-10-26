@@ -8,3 +8,31 @@ updates:
       actions:
         patterns:
           - "*"
+
+  # App dependencies. The lockfile lives in src/.
+  - package-ecosystem: "npm"
+    directory: "/src"
+    schedule:
+      interval: "weekly"
+    groups:
+      npm-minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Base images in the Dockerfile: node:24-slim and distroless nodejs24.
+  # A Node.js runtime fix arrives here, not through npm.
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  # Images in docker-compose.yml: Postgres, the Collector, Prometheus, Tempo, and Grafana.
+  - package-ecosystem: "docker-compose"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      compose-images:
+        patterns:
+          - "*"
