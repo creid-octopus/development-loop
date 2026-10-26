@@ -41,9 +41,10 @@ k8s/
 │   │   ├── configmap.yaml
 │   │   ├── deployment.yaml
 │   │   └── service.yaml
-│   ├── development/
-│   ├── test/
-│   └── production/
+│   ├── development/        # local builds
+│   ├── test/               # local builds
+│   ├── production/         # local builds
+│   └── octopus/            # Octopus only. #{...} tokens, one overlay for every environment
 │
 └── README.md
 ```

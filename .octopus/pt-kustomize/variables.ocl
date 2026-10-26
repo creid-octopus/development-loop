@@ -50,10 +50,6 @@ variable "Project.Ingress.Host" {
     value "kustomize-#{Helper.EnvironmentLowerCase}.developmentloop.#{Project.Ingress.Domain}" {}
 }
 
-variable "spec:template:spec:containers:0:image" {
-    value "#{Octopus.Action.Package[Kustomize.DeploymentImage].Image}" {}
-}
-
 variable "Project.Kustomize.OverlayDirectory" {
-    value "k8s/kustomize/#{Helper.EnvironmentLowerCase}" {}
+    value "k8s/kustomize/octopus" {}
 }

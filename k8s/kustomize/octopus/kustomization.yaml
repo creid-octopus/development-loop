@@ -1,0 +1,57 @@
+# Overlay that only Octopus builds. Do not run kustomize build on this folder.
+# Octopus replaces every #{...} value before Kustomize runs. One overlay serves
+# every environment. The development, test, and production overlays stay as
+# they are for local builds.
+#
+# Octopus variables used:
+#   Project.Kubernetes.NamespaceName
+#   Project.Postgres.DatabaseName
+#   Project.Postgres.AppRole
+#   Project.Ingress.Host
+#   Octopus.Environment.Name
+#   Octopus.Action.Package[Kustomize.DeploymentImage].PackageVersion
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../base
+
+namePrefix: kustomize-
+
+namespace: "#{Project.Kubernetes.NamespaceName}"
+
+# Matches the image in the base by name. The traffic job image stays untouched.
+images:
+  - name: ghcr.io/creid-octopus/development-loop
+    newTag: "#{Octopus.Action.Package[Kustomize.DeploymentImage].PackageVersion}"
+
+patches:
+  - target:
+      kind: ConfigMap
+    patch: |
+      - op: replace
+        path: /data/APP_ENV
+        value: "#{Octopus.Environment.Name}"
+      - op: replace
+        path: /data/PGDATABASE
+        value: "#{Project.Postgres.DatabaseName}"
+      - op: replace
+        path: /data/PGUSER
+        value: "#{Project.Postgres.AppRole}"
+
+  # Environment label on the app pods
+  - target:
+      kind: Deployment
+      name: developmentloop-demo
+    patch: |
+      - op: replace
+        path: /spec/template/metadata/labels/app.kubernetes.io~1environment
+        value: "#{Octopus.Environment.Name}"
+
+  # Host name for the Ingress
+  - target:
+      kind: Ingress
+    patch: |
+      - op: replace
+        path: /spec/rules/0/host
+        value: "#{Project.Ingress.Host}"
