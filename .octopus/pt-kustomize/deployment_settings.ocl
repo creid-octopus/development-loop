@@ -2,7 +2,7 @@ cancel_queued_tasks = true
 cancel_running_tasks = true
 release_notes_template = <<-EOT
         #{each package in Octopus.Release.Package}
-        Changes:
+        #{package} Changes:
         #{each commit in package.Commits}
         - [#{commit.CommitId}](#{commit.LinkUrl}) #{commit.Comment}
         #{/each}
