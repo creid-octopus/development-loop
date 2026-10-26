@@ -428,7 +428,7 @@ jobs:
       matrix:
         # Override with a repo variable, for example:
         #   ["PT - ArgoCD - Raw YAML"]
-        project: ${{ fromJSON(vars.OCTOPUS_PROJECTS || '["PT - ArgoCD - Raw YAML","PT - ArgoCD - Kustomize","PT - ArgoCD - Helm"]') }}
+        project: ${{ fromJSON(vars.OCTOPUS_PROJECTS || '["PT - Raw YAML","PT - Kustomize","PT - Helm"]') }}
 
     steps:
       - name: Log in to Octopus Deploy
