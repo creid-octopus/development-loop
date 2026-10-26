@@ -1,5 +1,5 @@
 # ── Build stage (shared by both targets) ─────────────────────
-FROM node:24-slim AS build
+FROM node:26-slim AS build
 WORKDIR /app
 COPY src/package*.json ./
 RUN npm ci --omit=dev
@@ -7,7 +7,7 @@ COPY src/ .
 
 # ── Debug target (feature / RC builds) ───────────────────────
 # Full node:24-slim — has shell, curl, npm for exec/debugging
-FROM node:24-slim AS debug
+FROM node:26-slim AS debug
 WORKDIR /app
 COPY --from=build /app .
 
