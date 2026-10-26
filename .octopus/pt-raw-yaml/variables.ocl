@@ -46,6 +46,10 @@ variable "Project.Ingress.Port" {
     value "8080" {}
 }
 
+variable "spec:template:spec:containers:0:image" {
+    value "#{Octopus.Action.Package[KubernetesYaml.DeploymentImage].Image}" {}
+}
+
 variable "Project.Ingress.Host" {
     value "raw-#{Helper.EnvironmentLowerCase}.developmentloop.#{Project.Ingress.Domain}" {}
 }
