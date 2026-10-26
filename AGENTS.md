@@ -36,6 +36,7 @@ docker compose up --build                # database, migrations, app, telemetry
 scripts/test-local.sh                    # end to end check of the local loop
 scripts/migrate.sh info                  # Flyway against DATABASE_URL, read only
 scripts/scan-migrations.sh               # scan migrations for risky SQL
+scripts/check-k8s-health.sh              # /health/db on every track and environment (needs the port-forward)
 ```
 
 Local details: [`docs/local-development.md`](docs/local-development.md).

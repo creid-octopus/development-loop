@@ -6,7 +6,7 @@ The service is the reference app for that golden path. It brings together severa
 
 The work is planned in layers. See [`agent-files/plan.md`](agent-files/plan.md) for the full plan. Each layer leaves a demo that works.
 
-> **Status:** layer 2, local first. The app, Postgres, Flyway migrations, and the local Grafana stack run with `docker compose up`. The raw YAML Octopus project deploys to Development, Test, and Production on a local cluster. It provisions the database in a runbook and verifies it before Flyway. The app connects with a limited login. The Helm and Kustomize projects are scaffolded. They wait for their process templates.
+> **Status:** layer 2, local first. The app, Postgres, Flyway migrations, and the local Grafana stack run with `docker compose up`. The raw YAML Octopus project deploys to Development, Test, and Production on a local cluster. It provisions the database in a runbook and verifies it before Flyway. The app connects with a limited login. The Helm and Kustomize projects deploy the same way. All three tracks deploy to Development, Test, and Production on the local cluster. `scripts/check-k8s-health.sh` checks all nine apps.
 
 ## How it fits together
 
@@ -43,6 +43,7 @@ The `nonprod` ApplicationSets cover Development and Test. The `prod` Application
 ├── scripts/
 │   ├── migrate.sh        # Flyway Community against any Postgres
 │   ├── scan-migrations.sh  # text scan for risky SQL
+│   ├── check-k8s-health.sh # /health/db on every track and environment
 │   └── test-local.sh     # checks the local loop end to end
 ├── observability/        # Collector, Prometheus, Tempo, and Grafana config
 ├── Dockerfile            # multi-stage: --target debug (node:24-slim)
