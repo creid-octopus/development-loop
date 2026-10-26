@@ -32,6 +32,10 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    # A Postgres major bump needs pg_upgrade. It also breaks the existing data volume.
+    ignore:
+      - dependency-name: "postgres"
+        update-types: ["version-update:semver-major"]
     groups:
       compose-images:
         patterns:

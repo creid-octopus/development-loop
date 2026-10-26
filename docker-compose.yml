@@ -25,7 +25,7 @@
 
 services:
   postgres:
-    image: postgres:18
+    image: postgres:17
     environment:
       POSTGRES_USER: app
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-app}
