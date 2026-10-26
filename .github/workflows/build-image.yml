@@ -449,6 +449,7 @@ jobs:
           package_version: ${{ needs.build.outputs.version }}
           release_number: ${{ needs.build.outputs.version }}
           ignore_existing: true
+          git_ref: ${{ github.ref }}
           custom_fields: |
             GH_WORKFLOW_RUN:${{ github.run_id }}
             GIT_COMMIT_SHA:${{ github.sha }}
