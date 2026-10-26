@@ -6,7 +6,7 @@ The service is the reference app for that golden path. It brings together severa
 
 The work is planned in layers. See [`agent-files/plan.md`](agent-files/plan.md) for the full plan. Each layer leaves a demo that works.
 
-> **Status:** layer 2, local first. The app, Postgres, Flyway migrations, and the local Grafana stack run with `docker compose up`. The Kubernetes manifests do not use the database yet. The Octopus process templates for the database come next.
+> **Status:** layer 2, local first. The app, Postgres, Flyway migrations, and the local Grafana stack run with `docker compose up`. The raw YAML Octopus project deploys to Development, Test, and Production on a local cluster. It provisions the database in a runbook and verifies it before Flyway. The app connects with a limited login. The Helm and Kustomize projects are scaffolded. They wait for their process templates.
 
 ## How it fits together
 
@@ -48,6 +48,10 @@ The `nonprod` ApplicationSets cover Development and Test. The `prod` Application
 ├── Dockerfile            # multi-stage: --target debug (node:24-slim)
 │                         #              --target release (distroless)
 ├── k8s/                  # manifests: raw/, kustomize/, helm/
+├── .octopus/             # Config as Code, one folder per Octopus project
+│   ├── pt-raw-yaml/      # deployment process, variables, and the provisioning runbooks
+│   ├── pt-kustomize/     # same shape, deploys with the Kustomize template
+│   └── pt-helm/          # same shape, deploys with the Helm template
 ├── argocd/               # ApplicationSets: nonprod/, prod/
 ├── tools/
 │   └── traffic-job.yaml  # one-off traffic generator for demos

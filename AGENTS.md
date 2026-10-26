@@ -12,14 +12,16 @@ The full plan lives in the [developmentloop v2 plan](./agent-files/plan.md) doc.
 | `local-workloads` | Local Postgres, Tentacle, worker, and the OpenTelemetry stack (Docker Compose) |
 | `composite-development-loop` | The v1 app. Use it as a reference only. Don't copy its Azure App Service process |
 
-Deployment process changes go in `octopus-base-infrastructure` as process templates. Don't add steps to this repo's `.octopus/` folder unless the plan says to.
+Deployment process changes go in `octopus-base-infrastructure` as process templates. Each Octopus project in this repo has a Config as Code folder in `.octopus/`. Those folders compose published templates. Don't add inline steps to them unless the plan says to.
 
 ## Layout
 
 ```
 src/            App code (Node 24, Express)
 db/migrations/  Flyway migrations (V__ and R__ files)
-k8s/            Kubernetes manifests
+k8s/            Kubernetes manifests (raw, kustomize, helm)
+.octopus/       Config as Code, one folder per Octopus project
+                pt-raw-yaml/, pt-kustomize/, pt-helm/
 .github/        GitHub Actions workflows
 docs/           Notes and decisions
 ```
@@ -55,6 +57,8 @@ Local details: [`docs/local-development.md`](docs/local-development.md).
 - Three logins touch a database: server admin, database owner, and app user. The admin only runs the provisioning runbook. The owner runs Flyway. The app user reads and writes rows and owns nothing. Details: [`docs/database-roles.md`](docs/database-roles.md).
 - Roles, databases, and grants come from the `Create and provision Postgres database` runbook, not the deployment. The deployment only verifies them.
 - The app connects as the app user. Never point the app at the owner or admin login.
+- The deployment locks `flyway_schema_history` against writes by the app user right after Flyway runs. Keep the `Lock migration history` step after the migration step.
+- The three delivery tracks share one database per environment. Deprovisioning one track removes the database for all three.
 - Never reuse the admin password for another login.
 
 ### Rollbacks

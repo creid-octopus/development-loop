@@ -26,6 +26,7 @@ Roles, databases, and grants are one time work. Migrations run on every deployme
 | Delete the database and roles | Runbook `Deprovision Postgres database` | To reset an environment or remove an ephemeral one |
 | Check the database is ready | Deployment step `Verify database ready` | Every deployment, before Flyway |
 | Apply migrations | Deployment steps `Run Flyway migrations` | Every deployment |
+| Lock the migration history | Deployment step `Lock migration history` | Every deployment, right after Flyway |
 | Create the app Secret | Deployment step `Create application secrets` | Every deployment |
 
 The deployment never creates roles or databases. When provisioning is missing, `Verify database ready` fails with the name of the runbook to run.
@@ -40,6 +41,20 @@ The deployment never creates roles or databases. When provisioning is missing, `
 6. Verifies the app role. It must connect, have the default privileges, and fail to create a table.
 
 Every step is safe to rerun. Each run resets both role passwords to the project values. A run on a healthy environment changes nothing else.
+
+## Locking the migration history
+
+Flyway records every migration in the table `flyway_schema_history`. The app reads that table to report its schema version. The app must never write it.
+
+Flyway creates the table during the first migration. That is after the provisioning runbook has run. Default privileges then give the app user write access to the new table.
+
+The deployment step `Lock migration history` closes that gap. It runs right after Flyway and connects as the database owner. The owner created the table, so the owner can revoke access. The step revokes `INSERT`, `UPDATE`, `DELETE`, and `TRUNCATE` from the app user. It then checks that the app user can read the table and cannot write it.
+
+The step is safe to run on every deployment. The first deployment to a new database locks the table. No manual rerun of the runbook is needed.
+
+## Three tracks share one database
+
+The raw YAML, Helm, and Kustomize tracks deploy the same app. Each track has its own Octopus project. All three use one database and one pair of app and owner logins in each environment. Provisioning one track provisions the others. Deprovisioning any track removes the database for all three.
 
 ## Project variables
 
@@ -63,7 +78,8 @@ Octopus creates the Secret from `k8s/raw/<env>/secrets/database_connection.yaml`
 
 ## Known limits
 
-- The app user keeps write access on `flyway_schema_history` until the provision runbook runs again after the first migration. Flyway creates that table after the grants run. The next run revokes the write access.
+- The app user has write access on `flyway_schema_history` for a short time. The window runs from table creation to the `Lock migration history` step in the same deployment. A failed migration can leave the table unlocked until the next successful deployment.
+- The lock step assumes the default Flyway table name. Set the `Postgres.History.Table` parameter when Flyway uses a custom name.
 - Resetting an environment loses its data. Run the deprovision runbook, then the provision runbook, then deploy. The deprovision steps refuse to run in Production.
 - Password rotation is a runbook run. A deployment no longer resets the passwords.
 
