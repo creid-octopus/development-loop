@@ -73,6 +73,40 @@ process_template "run-flyway-migrations" {
     }
 }
 
+process_template "lock-migration-history" {
+    name = "Lock migration history"
+    process_template_slug = "postgres-lock-migration-history"
+    version_mask = "1.X"
+
+    parameter "Postgres.TargetRole" {
+        value = "local-postgres"
+    }
+
+    parameter "Postgres.Server.Host" {
+        value = "#{Project.Postgres.Host}"
+    }
+
+    parameter "Postgres.Server.Port" {
+        value = "#{Project.Postgres.Port}"
+    }
+
+    parameter "Postgres.Database.Name" {
+        value = "#{Project.Postgres.DatabaseName}"
+    }
+
+    parameter "Postgres.Owner.Username" {
+        value = "#{Project.Postgres.OwnerRole}"
+    }
+
+    parameter "Postgres.Owner.Password" {
+        value = "#{Project.Postgres.OwnerPassword}"
+    }
+
+    parameter "Postgres.App.Username" {
+        value = "#{Project.Postgres.AppRole}"
+    }
+}
+
 process_template "create-namespace" {
     name = "Create Namespace"
     process_template_slug = "kubectl-create-namespace"
