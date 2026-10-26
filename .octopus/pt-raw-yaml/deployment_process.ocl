@@ -178,6 +178,10 @@ process_template "deploy-developmentloop" {
     parameter "KuberenetesYaml.GitRepositoryFilePath" {
         value = "k8s/raw/#{Helper.EnvironmentLowerCase}/*"
     }
+
+    parameter "KubernetesYaml.StructuredVariableFiles" {
+        value = "**/deployment.yaml"
+    }
     parameter "KubernetesYaml.TargetTag" {
         value = "k8s-agent"
     }
