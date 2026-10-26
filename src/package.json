@@ -14,7 +14,7 @@
     "@opentelemetry/instrumentation-http": "^0.222.0",
     "@opentelemetry/resources": "^2.11.0",
     "@opentelemetry/sdk-node": "^0.222.0",
-    "express": "^4.19.2",
+    "express": "^5.3.0",
     "pg": "^8.13.1"
   },
   "engines": {
