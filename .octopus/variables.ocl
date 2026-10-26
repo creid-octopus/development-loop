@@ -33,3 +33,19 @@ variable "Project.Kubernetes.NamespaceName" {
 variable "Project.Postgres.AppHost" {
     value "host.docker.internal" {}
 }
+
+variable "Project.Ingress.Domain" {
+    value "localtest.me" {}
+}
+
+variable "Project.Ingress.ClassName" {
+    value "nginx" {}
+}
+
+variable "Project.Ingress.Port" {
+    value "8080" {}
+}
+
+variable "Project.Ingress.Host" {
+    value "raw-#{Helper.EnvironmentLowerCase}.developmentloop.#{Project.Ingress.Domain}" {}
+}

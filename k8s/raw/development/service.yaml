@@ -6,12 +6,11 @@ metadata:
     app: raw-developmentloop-demo
   namespace: developmentloop-demo-development
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   selector:
     app: raw-developmentloop-demo
   ports:
     - name: http
       port: 80
       targetPort: 3000
-  # Docker Desktop: external IP resolves to localhost
-  # AKS: Azure provisions a public IP via cloud-provider-azure
+  # Reached through the Ingress in ingress.yaml.

@@ -1,0 +1,20 @@
+# Routes http://<host> to the app. Overlays patch the host for each environment.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: developmentloop-demo
+  labels:
+    app: developmentloop-demo
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: kustomize.developmentloop.localtest.me
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: developmentloop-demo
+                port:
+                  name: http

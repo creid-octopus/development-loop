@@ -32,3 +32,11 @@ patches:
       - op: replace
         path: /spec/template/metadata/labels/app.kubernetes.io~1environment
         value: "Test"
+
+  # Host name for the Ingress
+  - target:
+      kind: Ingress
+    patch: |
+      - op: replace
+        path: /spec/rules/0/host
+        value: "kustomize-test.developmentloop.localtest.me"

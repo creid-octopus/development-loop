@@ -52,6 +52,10 @@ Local details: [`docs/local-development.md`](docs/local-development.md).
 - Never put a destructive change (`DROP`, column rename, `NOT NULL` without a default) in the same release as the code that stops using it.
 - Each tenant gets its own database. The tenant key names the database and the user.
 - Migrations run on an Octopus worker before the app deploys. The app never migrates on startup.
+- Three logins touch a database: server admin, database owner, and app user. The admin only runs the provisioning runbook. The owner runs Flyway. The app user reads and writes rows and owns nothing. Details: [`docs/database-roles.md`](docs/database-roles.md).
+- Roles, databases, and grants come from the `Create and provision Postgres database` runbook, not the deployment. The deployment only verifies them.
+- The app connects as the app user. Never point the app at the owner or admin login.
+- Never reuse the admin password for another login.
 
 ### Rollbacks
 

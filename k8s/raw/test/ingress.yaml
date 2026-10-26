@@ -1,0 +1,22 @@
+# Routes http://<host> to the app. Octopus replaces the #{...} values at deploy time.
+# On a local kind cluster, run the port-forward in k8s/README.md first.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: raw-developmentloop-demo
+  namespace: developmentloop-demo-test
+  labels:
+    app: raw-developmentloop-demo
+spec:
+  ingressClassName: "#{Project.Ingress.ClassName}"
+  rules:
+    - host: "#{Project.Ingress.Host}"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: raw-developmentloop-demo
+                port:
+                  name: http

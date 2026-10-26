@@ -130,7 +130,7 @@ docker compose --profile traffic up traffic     # optional steady traffic
 
 Open the app at `http://localhost:3001` and Grafana at `http://localhost:3100`.
 
-The app reads its database from `DATABASE_URL`. Pointing it at another database is a change of environment, not code. See [`docs/local-development.md`](docs/local-development.md) for what each service does, how to swap the database, and how to fix common failures.
+The app reads its database from `DATABASE_URL`, or from the standard `PG*` variables. Pointing it at another database is a change of environment, not code. On Kubernetes the app uses the `PG*` variables and connects as a login that cannot change tables. See [`docs/database-roles.md`](docs/database-roles.md) for the role split and the provisioning runbooks. See [`docs/local-development.md`](docs/local-development.md) for what each service does, how to swap the database, and how to fix common failures.
 
 Run the unit tests (no Docker needed):
 

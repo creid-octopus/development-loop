@@ -6,7 +6,7 @@ metadata:
     app: raw-developmentloop-demo
   namespace: developmentloop-demo-test
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   selector:
     app: raw-developmentloop-demo
   ports:

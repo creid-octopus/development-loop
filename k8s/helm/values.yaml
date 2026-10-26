@@ -21,6 +21,13 @@ requestsMemory: 128Mi
 limitsCpu: 250m
 limitsMemory: 256Mi
 
+# Ingress. Per-environment files set the host. On a real cluster, set className
+# and host for that cluster.
+ingress:
+  enabled: true
+  className: nginx
+  host: helm.developmentloop.localtest.me
+
 # Database connection. The password comes from the Secret named below. Octopus
 # creates that Secret before the app deploys. Per-environment files set name and user.
 database:

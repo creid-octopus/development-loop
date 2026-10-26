@@ -6,12 +6,11 @@ metadata:
     {{- include "app.labels" . | nindent 4 }}
   namespace: {{ .Values.namespace }}
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   selector:
     app: {{ .Values.appName }}
   ports:
     - name: http
       port: {{ .Values.servicePort }}
       targetPort: {{ .Values.containerPort }}
-  # Docker Desktop: external IP resolves to localhost
-  # AKS: Azure provisions a public IP via cloud-provider-azure
+  # Reached through the Ingress in ingress.yaml.

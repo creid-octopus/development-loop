@@ -99,3 +99,29 @@ Each Application creates its namespace automatically (`CreateNamespace=true`).
 | Kustomize | Many environments sharing the same base, heavy namespace/label patching | Moderate |
 
 This repo keeps all three so you can prototype with one, migrate to another, or run them side-by-side while evaluating.
+
+## Reaching the app locally
+
+Each track has an Ingress. The Services are `ClusterIP`, so several tracks can share one port.
+
+| Track | Host |
+| --- | --- |
+| Raw YAML | `raw-<env>.developmentloop.localtest.me` |
+| Helm | `helm-<env>.developmentloop.localtest.me` |
+| Kustomize | `kustomize-<env>.developmentloop.localtest.me` |
+
+`localtest.me` resolves to 127.0.0.1. On the local Docker Desktop cluster the ingress controller is not reachable from the Mac, so run a port-forward and keep it open:
+
+```bash
+kubectl port-forward svc/ingress-nginx-controller 8080:8080 -n ingress-nginx
+```
+
+Then open `http://raw-development.developmentloop.localtest.me:8080`.
+
+On a real cluster the same manifests apply. Change the ingress class and host for that cluster:
+
+- **Raw YAML:** the `Project.Ingress.Domain`, `Project.Ingress.ClassName`, and `Project.Ingress.Port` variables. Clear the port when the controller uses 80 or 443.
+- **Helm:** `ingress.className` and `ingress.host` in the values files.
+- **Kustomize:** the Ingress host patch in each overlay.
+
+The postdeploy Slack message prints the raw YAML URL.
