@@ -1,0 +1,55 @@
+variable "Project.Postgres.Port" {
+    value "5432" {}
+}
+
+variable "Project.Postgres.OwnerRole" {
+    value "developmentloop_owner_#{Helper.EnvironmentLowerCase}" {}
+}
+
+variable "Project.Postgres.AppRole" {
+    value "developmentloop_app_#{Helper.EnvironmentLowerCase}" {}
+}
+
+variable "Project.Postgres.Host" {
+    value "192.168.65.254" {}
+}
+
+variable "Project.Postgres.DatabaseName" {
+    value "developmentloop_#{Helper.EnvironmentLowerCase}" {}
+}
+
+variable "Helper.EnvironmentLowerCase" {
+    value "#{Octopus.Environment.Name | ToLower}" {}
+}
+
+variable "Project.Kubernetes.RepositoryUrl" {
+    value "https://github.com/creid-octopus/development-loop" {}
+}
+
+variable "Project.Kubernetes.NamespaceName" {
+    value "developmentloop-demo-#{Helper.EnvironmentLowerCase}" {}
+}
+
+variable "Project.Postgres.AppHost" {
+    value "host.docker.internal" {}
+}
+
+variable "Project.Ingress.Domain" {
+    value "localtest.me" {}
+}
+
+variable "Project.Ingress.ClassName" {
+    value "nginx" {}
+}
+
+variable "Project.Ingress.Port" {
+    value "8080" {}
+}
+
+variable "Project.Ingress.Host" {
+    value "kustomize-#{Helper.EnvironmentLowerCase}.developmentloop.#{Project.Ingress.Domain}" {}
+}
+
+variable "Project.Kustomize.OverlayDirectory" {
+    value "k8s/kustomize/#{Helper.EnvironmentLowerCase}" {}
+}

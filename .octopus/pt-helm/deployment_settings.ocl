@@ -1,5 +1,14 @@
 cancel_queued_tasks = true
 cancel_running_tasks = true
+release_notes_template = <<-EOT
+        #{each package in Octopus.Release.Package}
+        Changes:
+        #{each commit in package.Commits}
+        - [#{commit.CommitId}](#{commit.LinkUrl}) #{commit.Comment}
+        #{/each}
+        #{/each}
+        Related Tickets:
+        EOT
 
 connectivity_policy {
     allow_deployments_to_no_targets = true
@@ -7,4 +16,8 @@ connectivity_policy {
 
 versioning_strategy {
     template = "#{Octopus.Version.LastMajor}.#{Octopus.Version.LastMinor}.#{Octopus.Version.NextPatch}"
+    donor_package {
+        package = "helm-deploymentimage"
+        step = "deploy-developmentloop-deploy-a-helm-chart"
+    }
 }
