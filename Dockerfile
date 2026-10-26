@@ -1,13 +1,13 @@
 # ── Build stage (shared by both targets) ─────────────────────
-FROM node:26-slim AS build
+FROM node:24.22.1-slim AS build
 WORKDIR /app
 COPY src/package*.json ./
 RUN npm ci --omit=dev
 COPY src/ .
 
 # ── Debug target (feature / RC builds) ───────────────────────
-# Full node:24-slim — has shell, curl, npm for exec/debugging
-FROM node:26-slim AS debug
+# Full node:24.22.1-slim — has shell, curl, npm for exec/debugging
+FROM node:24.22.1-slim AS debug
 WORKDIR /app
 COPY --from=build /app .
 
@@ -30,9 +30,16 @@ EXPOSE 3000
 CMD ["node", "server.js"]
 
 # ── Release target (main / stable builds) ────────────────────
-# Distroless — no shell, no package manager, minimal attack surface
-FROM gcr.io/distroless/nodejs24-debian12 AS release
+# Source of the Node.js binary for the release image.
+# Pinned so a runtime fix is one tag bump. Dependabot updates this tag.
+FROM node:24.22.1-slim AS node-bin
+
+# Distroless — no shell, no package manager, minimal attack surface.
+# The cc base has the C++ runtime that Node needs. The nodejs distroless image
+# ships an older Node, so the binary comes from the pinned stage above.
+FROM gcr.io/distroless/cc-debian12 AS release
 WORKDIR /app
+COPY --from=node-bin /usr/local/bin/node /usr/local/bin/node
 COPY --from=build /app .
 
 ARG APP_VERSION=0.0.0-local
@@ -48,5 +55,6 @@ ENV APP_VERSION=${APP_VERSION} \
     APP_COMMIT_SHA=${APP_COMMIT_SHA}
 
 EXPOSE 3000
-# Distroless ENTRYPOINT is the node binary — CMD is just the script path
+# ENTRYPOINT is the node binary — CMD is just the script path
+ENTRYPOINT ["/usr/local/bin/node"]
 CMD ["server.js"]

@@ -26,6 +26,10 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    # Stay on Node 24 for every stage. Move to a new major on purpose, not by bot.
+    ignore:
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
 
   # Images in docker-compose.yml: Postgres, the Collector, Prometheus, Tempo, and Grafana.
   - package-ecosystem: "docker-compose"
