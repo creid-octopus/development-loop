@@ -1,7 +1,7 @@
 process_template "predeploy-notification" {
     name = "Predeploy Notification"
-    process_template_slug = "notifications-postdeploy"
-    version_mask = "5.X"
+    process_template_slug = "notifications-predeploy"
+    version_mask = "2.X"
 }
 
 process_template "verify-package-attestation" {
