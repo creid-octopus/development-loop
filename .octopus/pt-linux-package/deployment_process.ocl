@@ -4,6 +4,33 @@ process_template "predeploy-notification" {
     version_mask = "5.X"
 }
 
+process_template "verify-package-attestation" {
+    name = "Verify package attestation"
+    process_template_slug = "verify-package-attestation"
+    version_mask = "1.X"
+
+    package_parameter "Attestation.Package" {
+        feed = "octopus-server-built-in"
+        package_id = "developmentloop-app"
+    }
+
+    parameter "Attestation.Repo" {
+        value = "creid-octopus/development-loop"
+    }
+
+    parameter "Attestation.Token" {
+        value = "#{Project.GitHub.AttestationToken}"
+    }
+
+    parameter "Attestation.WorkerPool" {
+        value = "WorkerPools-82"
+    }
+
+    parameter "Attestation.Flags" {
+        value = "--source-ref refs/heads/main"
+    }
+}
+
 process_template "verify-database-ready" {
     name = "Verify database ready"
     process_template_slug = "postgres-verify-app-access"
