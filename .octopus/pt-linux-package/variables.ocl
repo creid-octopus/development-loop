@@ -41,6 +41,10 @@ variable "Project.Server.Port" {
     value "3000" {}
 }
 
+variable "Project.Environment.Url" {
+    value "http://localhost:#{Project.Server.PublishedPort}" {}
+}
+
 variable "Project.Server.PublishedPort" {
     value "#{if Octopus.Environment.Name == \"Development\"}3101#{/if}#{if Octopus.Environment.Name == \"Test\"}3102#{/if}#{if Octopus.Environment.Name == \"Production\"}3103#{/if}" {}
 }

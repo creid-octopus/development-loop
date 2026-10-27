@@ -163,6 +163,24 @@ process_template "postdeploy-notification" {
     version_mask = "5.X"
 
     parameter "Parameters.CustomMessage" {
-        value = "App: http://localhost:#{Project.Server.PublishedPort}"
+        value = "App: #{Project.Environment.Url}"
+    }
+}
+
+step "show-app-url" {
+    name = "Show app URL"
+
+    action {
+        action_type = "Octopus.Script"
+        properties = {
+            Octopus.Action.RunOnServer = "false"
+            Octopus.Action.Script.ScriptBody = <<-EOT
+                write_highlight "[Open #{Octopus.Project.Name} in #{Octopus.Environment.Name}](#{Project.Environment.Url})"
+                write_highlight "Health check: [#{Project.Environment.Url}/health/db](#{Project.Environment.Url}/health/db)"
+                EOT
+            Octopus.Action.Script.ScriptSource = "Inline"
+            Octopus.Action.Script.Syntax = "Bash"
+            Octopus.Action.TargetRoles = "app-server"
+        }
     }
 }
