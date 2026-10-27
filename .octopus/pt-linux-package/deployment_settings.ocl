@@ -1,14 +1,5 @@
 cancel_queued_tasks = true
 cancel_running_tasks = true
-
-connectivity_policy {
-    allow_deployments_to_no_targets = true
-}
-
-versioning_strategy {
-    template = "#{Octopus.Version.LastMajor}.#{Octopus.Version.LastMinor}.#{Octopus.Version.NextPatch}"
-}cancel_queued_tasks = true
-cancel_running_tasks = true
 release_notes_template = <<-EOT
         #{each package in Octopus.Release.Package}
         Changes:
@@ -18,3 +9,13 @@ release_notes_template = <<-EOT
         #{/each}
         Related Tickets:
         EOT
+
+connectivity_policy {
+    allow_deployments_to_no_targets = true
+}
+
+versioning_strategy {
+    donor_package {
+        step = "deploy-app-package-deploy-package"
+    }
+}
