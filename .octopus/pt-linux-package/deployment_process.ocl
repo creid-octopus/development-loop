@@ -2,6 +2,10 @@ process_template "predeploy-notification" {
     name = "Predeploy Notification"
     process_template_slug = "notifications-predeploy"
     version_mask = "2.X"
+
+    parameter "Slack.Predeploy.RunEnvs" {
+        value = "Environments-4"
+    }
 }
 
 process_template "verify-package-attestation" {
