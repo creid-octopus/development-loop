@@ -29,6 +29,10 @@ process_template "verify-package-attestation" {
     parameter "Attestation.Flags" {
         value = "--source-ref refs/heads/main"
     }
+
+    parameter "Attestation.Owner" {
+        value = "creid-octopus"
+    }
 }
 
 process_template "verify-database-ready" {
