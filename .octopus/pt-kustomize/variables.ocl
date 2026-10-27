@@ -46,6 +46,10 @@ variable "Project.Ingress.Port" {
     value "8080" {}
 }
 
+variable "Project.Environment.Url" {
+    value "http://#{Project.Ingress.Host}#{if Project.Ingress.Port}:#{Project.Ingress.Port}#{/if}" {}
+}
+
 variable "Project.Ingress.Host" {
     value "kustomize-#{Helper.EnvironmentLowerCase}.developmentloop.#{Project.Ingress.Domain}" {}
 }

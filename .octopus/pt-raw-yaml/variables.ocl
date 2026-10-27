@@ -50,6 +50,10 @@ variable "spec:template:spec:containers:0:image" {
     value "#{Octopus.Action.Package[KubernetesYaml.DeploymentImage].Image}" {}
 }
 
+variable "Project.Environment.Url" {
+    value "http://#{Project.Ingress.Host}#{if Project.Ingress.Port}:#{Project.Ingress.Port}#{/if}" {}
+}
+
 variable "Project.Ingress.Host" {
     value "raw-#{Helper.EnvironmentLowerCase}.developmentloop.#{Project.Ingress.Domain}" {}
 }
