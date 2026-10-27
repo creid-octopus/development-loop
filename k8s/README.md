@@ -125,4 +125,25 @@ On a real cluster the same manifests apply. Change the ingress class and host fo
 - **Helm:** `ingress.className` and `ingress.host` in the values files.
 - **Kustomize:** the Ingress host patch in each overlay.
 
-The postdeploy Slack message prints the raw YAML URL.
+The postdeploy Slack message and the "Show app URL" step print each project's URL.
+
+### Rolling updates of the ingress controller can deadlock
+
+The local ingress controller binds host ports. A rolling update starts the new pod before the old pod stops. The new pod then waits forever for the same host ports. The pod events show `didn't have free ports`.
+
+Switch the controller to the `Recreate` strategy once. The old pod then stops before the new pod starts.
+
+```bash
+kubectl patch deployment ingress-nginx-controller -n ingress-nginx \
+  --type merge \
+  -p '{"spec":{"strategy":{"type":"Recreate","rollingUpdate":null}}}'
+```
+
+A Helm upgrade of the controller resets this patch. Set the strategy in the chart values to keep it. Recreate causes a short outage while the controller restarts.
+
+### Checking every deployment
+
+```bash
+scripts/check-k8s-health.sh      # container tracks. Needs the port-forward.
+scripts/check-server-health.sh   # Linux server path on ports 3101 to 3103
+```
