@@ -173,7 +173,6 @@ step "show-app-url" {
     action {
         action_type = "Octopus.Script"
         properties = {
-            Octopus.Action.RunOnServer = "false"
             Octopus.Action.Script.ScriptBody = <<-EOT
                 write_highlight "[Open #{Octopus.Project.Name} in #{Octopus.Environment.Name}](#{Project.Environment.Url})"
                 write_highlight "Health check: [#{Project.Environment.Url}/health/db](#{Project.Environment.Url}/health/db)"
@@ -182,5 +181,6 @@ step "show-app-url" {
             Octopus.Action.Script.Syntax = "Bash"
             Octopus.Action.TargetRoles = "app-server"
         }
+        worker_pool = "local-machine"
     }
 }
