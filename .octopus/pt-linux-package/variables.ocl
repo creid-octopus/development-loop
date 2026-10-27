@@ -1,0 +1,46 @@
+variable "Project.Postgres.Port" {
+    value "5432" {}
+}
+
+
+variable "Project.Postgres.OwnerRole" {
+    value "developmentloop_owner_#{Helper.EnvironmentLowerCase}" {}
+}
+
+
+variable "Project.Postgres.AppRole" {
+    value "developmentloop_app_#{Helper.EnvironmentLowerCase}" {}
+}
+
+
+variable "Project.Postgres.Host" {
+    value "192.168.65.254" {}
+}
+
+
+variable "Project.Postgres.DatabaseName" {
+    value "developmentloop_#{Helper.EnvironmentLowerCase}" {}
+}
+
+
+variable "Helper.EnvironmentLowerCase" {
+    value "#{Octopus.Environment.Name | ToLower}" {}
+}
+
+
+variable "Project.Postgres.AppHost" {
+    value "host.docker.internal" {}
+}
+
+
+variable "Project.Server.InstallDirectory" {
+    value "/opt/developmentloop/current" {}
+}
+
+variable "Project.Server.Port" {
+    value "3000" {}
+}
+
+variable "Project.Server.PublishedPort" {
+    value "#{if Octopus.Environment.Name == \"Development\"}3101#{/if}#{if Octopus.Environment.Name == \"Test\"}3102#{/if}#{if Octopus.Environment.Name == \"Production\"}3103#{/if}" {}
+}

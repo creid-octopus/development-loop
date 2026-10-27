@@ -1,0 +1,137 @@
+process_template "predeploy-notification" {
+    name = "Predeploy Notification"
+    process_template_slug = "notifications-postdeploy"
+    version_mask = "5.X"
+}
+
+process_template "verify-database-ready" {
+    name = "Verify database ready"
+    process_template_slug = "postgres-verify-app-access"
+    version_mask = "1.X"
+
+    parameter "Postgres.TargetRole" {
+        value = "local-postgres"
+    }
+
+    parameter "Postgres.Server.Host" {
+        value = "#{Project.Postgres.Host}"
+    }
+
+    parameter "Postgres.Server.Port" {
+        value = "#{Project.Postgres.Port}"
+    }
+
+    parameter "Postgres.Database.Name" {
+        value = "#{Project.Postgres.DatabaseName}"
+    }
+
+    parameter "Postgres.Database.Owner" {
+        value = "#{Project.Postgres.OwnerRole}"
+    }
+
+    parameter "Postgres.App.Username" {
+        value = "#{Project.Postgres.AppRole}"
+    }
+
+    parameter "Postgres.App.Password" {
+        value = "#{Project.Postgres.AppPassword}"
+    }
+}
+
+process_template "run-flyway-migrations" {
+    name = "Run Flyway migrations"
+    process_template_slug = "postgres-apply-flyway-migrations"
+    version_mask = "1.X"
+
+    package_parameter "Postgres.Migrations.Package" {
+        feed = "octopus-server-built-in"
+        package_id = "developmentloop-flyway"
+    }
+
+    parameter "Postgres.Server.Host" {
+        value = "#{Project.Postgres.Host}"
+    }
+
+    parameter "Postgres.Database.Name" {
+        value = "#{Project.Postgres.DatabaseName}"
+    }
+
+    parameter "Postgres.Migration.Password" {
+        value = "#{Project.Postgres.OwnerPassword}"
+    }
+
+    parameter "Postgres.Migration.Username" {
+        value = "#{Project.Postgres.OwnerRole}"
+    }
+
+    parameter "Postgres.Worker.Pool" {
+        value = "WorkerPools-82"
+    }
+
+    parameter "Postgres.Review.Policy" {
+        value = "risky"
+    }
+}
+
+process_template "lock-migration-history" {
+    name = "Lock migration history"
+    process_template_slug = "postgres-lock-migration-history"
+    version_mask = "1.X"
+
+    parameter "Postgres.TargetRole" {
+        value = "local-postgres"
+    }
+
+    parameter "Postgres.Server.Host" {
+        value = "#{Project.Postgres.Host}"
+    }
+
+    parameter "Postgres.Server.Port" {
+        value = "#{Project.Postgres.Port}"
+    }
+
+    parameter "Postgres.Database.Name" {
+        value = "#{Project.Postgres.DatabaseName}"
+    }
+
+    parameter "Postgres.Owner.Username" {
+        value = "#{Project.Postgres.OwnerRole}"
+    }
+
+    parameter "Postgres.Owner.Password" {
+        value = "#{Project.Postgres.OwnerPassword}"
+    }
+
+    parameter "Postgres.App.Username" {
+        value = "#{Project.Postgres.AppRole}"
+    }
+}
+
+process_template "deploy-app-package" {
+    name = "Deploy app package"
+    process_template_slug = "linux-deploy-package"
+    version_mask = "1.X"
+
+    package_parameter "LinuxPackage.Package" {
+        feed = "octopus-server-built-in"
+        package_id = "developmentloop-app"
+    }
+
+    parameter "LinuxPackage.TargetRole" {
+        value = "app-server"
+    }
+
+    parameter "LinuxPackage.InstallDirectory" {
+        value = "#{Project.Server.InstallDirectory}"
+    }
+}
+
+process_template "postdeploy-notification" {
+    name = "Postdeploy Notification"
+    process_template_slug = "notifications-postdeploy"
+    version_mask = "5.X"
+
+    parameter "Parameters.CustomMessage" {
+        value = "App: http://localhost:#{Project.Server.PublishedPort}"
+    }
+}

@@ -1,0 +1,96 @@
+name = "Deprovision Postgres database"
+cancel_queued_tasks = true
+cancel_running_tasks = true
+default_guided_failure_mode = "EnvironmentDefault"
+description = "Deletes the database and both roles for this environment. All data in the database is lost. Use it to reset an environment or to remove an ephemeral one. The steps refuse to run in Production. Run Create and Provision Postgres database afterward to rebuild."
+
+connectivity_policy {
+    allow_deployments_to_no_targets = true
+}
+
+run_retention_policy {
+    type = "Default"
+}
+
+process {
+    step "confirm-deprovision" {
+        name = "Confirm deprovision"
+
+        action {
+            action_type = "Octopus.Manual"
+            notes = "Stops the run until someone approves. Abort to keep the database."
+            properties = {
+                Octopus.Action.Manual.BlockConcurrentDeployments = "False"
+                Octopus.Action.Manual.Instructions = "This deletes the database #{Project.Postgres.DatabaseName} and the roles #{Project.Postgres.AppRole} and #{Project.Postgres.OwnerRole} in #{Octopus.Environment.Name}. All data in the database is lost. Approve to continue. Abort to keep everything."
+                Octopus.Action.Manual.ResponsibleTeamIds = "global/everyone"
+                Octopus.Action.RunOnServer = "false"
+            }
+        }
+    }
+
+    process_template "drop-database" {
+        name = "Drop database"
+        process_template_slug = "postgres-drop-database-if-exists"
+        version_mask = "1.X"
+
+        parameter "Postgres.TargetRole" {
+            value = "local-postgres"
+        }
+
+        parameter "Postgres.Server.Host" {
+            value = "#{Project.Postgres.Host}"
+        }
+
+        parameter "Postgres.Server.Port" {
+            value = "#{Project.Postgres.Port}"
+        }
+
+        parameter "Postgres.Database.Name" {
+            value = "#{Project.Postgres.DatabaseName}"
+        }
+    }
+
+    process_template "drop-app-role" {
+        name = "Drop app role"
+        process_template_slug = "postgres-drop-user-if-exists"
+        version_mask = "1.X"
+
+        parameter "Postgres.TargetRole" {
+            value = "local-postgres"
+        }
+
+        parameter "Postgres.Server.Host" {
+            value = "#{Project.Postgres.Host}"
+        }
+
+        parameter "Postgres.Server.Port" {
+            value = "#{Project.Postgres.Port}"
+        }
+
+        parameter "Postgres.Login.Username" {
+            value = "#{Project.Postgres.AppRole}"
+        }
+    }
+
+    process_template "drop-owner-role" {
+        name = "Drop owner role"
+        process_template_slug = "postgres-drop-user-if-exists"
+        version_mask = "1.X"
+
+        parameter "Postgres.TargetRole" {
+            value = "local-postgres"
+        }
+
+        parameter "Postgres.Server.Host" {
+            value = "#{Project.Postgres.Host}"
+        }
+
+        parameter "Postgres.Server.Port" {
+            value = "#{Project.Postgres.Port}"
+        }
+
+        parameter "Postgres.Login.Username" {
+            value = "#{Project.Postgres.OwnerRole}"
+        }
+    }
+}
