@@ -52,7 +52,9 @@ The `nonprod` ApplicationSets cover Development and Test. The `prod` Application
 ├── .octopus/             # Config as Code, one folder per Octopus project
 │   ├── pt-raw-yaml/      # deployment process, variables, and the provisioning runbooks
 │   ├── pt-kustomize/     # same shape, deploys with the Kustomize template
-│   └── pt-helm/          # same shape, deploys with the Helm template
+│   ├── pt-helm/          # same shape, deploys with the Helm template
+│   └── pt-linux-package/ # same database steps, deploys a package to Linux servers
+├── deploy/server/        # ships inside the server package: PostDeploy.sh, service.sh, env template, systemd unit
 ├── argocd/               # ApplicationSets: nonprod/, prod/
 ├── tools/
 │   └── traffic-job.yaml  # one-off traffic generator for demos
@@ -72,6 +74,7 @@ The `nonprod` ApplicationSets cover Development and Test. The `prod` Application
 | Workflow | Trigger | What it does |
 | --- | --- | --- |
 | `ci.yml` | Every push and pull request | Runs a Trivy filesystem scan and a dry build of the image. Nothing is pushed |
+| `build-package.yml` | Push to `main` with `src/**`, `db/migrations/**`, or `deploy/server/**` changes, or manual dispatch | Builds the app zip with production dependencies, an SBOM zip, and a Flyway zip. Attests the three zips. Pushes them to Octopus and deploys to Development. See [`docs/server-deployment.md`](docs/server-deployment.md) |
 | `build-image.yml` | Push to `main` with `src/**` or Dockerfile changes, a weekly schedule, or manual dispatch | Builds and pushes the image to GHCR. Generates an SPDX SBOM and pushes it to Octopus. Attests main builds. Scans the pushed image |
 
 A release workflow arrives in layer 2. It will push build information, add release custom fields, and create the Octopus release.

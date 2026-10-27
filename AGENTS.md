@@ -21,7 +21,8 @@ src/            App code (Node 24, Express)
 db/migrations/  Flyway migrations (V__ and R__ files)
 k8s/            Kubernetes manifests (raw, kustomize, helm)
 .octopus/       Config as Code, one folder per Octopus project
-                pt-raw-yaml/, pt-kustomize/, pt-helm/
+                pt-raw-yaml/, pt-kustomize/, pt-helm/, pt-linux-package/
+deploy/server/  Files that ship inside the server package (scripts, env template, systemd unit)
 .github/        GitHub Actions workflows
 docs/           Notes and decisions
 ```
@@ -77,6 +78,8 @@ Local details: [`docs/local-development.md`](docs/local-development.md).
 ### Builds and releases
 
 - GitHub Actions builds the image and the Flyway package, pushes build information, and creates the release.
+- The server path has its own workflow, `build-package.yml`. It builds the app zip, the SBOM zip, and the Flyway zip at version `1.1.<run>`. The container path stays at `1.0.<run>`. Details: [`docs/server-deployment.md`](docs/server-deployment.md).
+- A server package never contains the Node.js runtime. Keep the minimum runtime check in the deployment.
 - Release custom fields: `PullRequestNumber` and `AIAssisted` (`true` or `false`). Octopus allows at most 10 fields, each 150 characters or less.
 - Set `AIAssisted` to `true` when a commit has an AI co-author trailer or the pull request has the `ai-assisted` label.
 - Commits made by an agent must include a `Co-authored-by` trailer.

@@ -1,0 +1,27 @@
+# Reference systemd unit for a real Linux server. The local app server containers
+# have no systemd and use service.sh instead.
+#
+# Install once per server:
+#   sudo useradd --system --home /opt/developmentloop developmentloop
+#   sudo cp developmentloop.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable developmentloop
+#
+# Octopus then restarts the unit on every deployment. The deployment user needs
+# permission to run: systemctl restart developmentloop.service
+[Unit]
+Description=developmentloop demo app
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=developmentloop
+WorkingDirectory=/opt/developmentloop/current
+EnvironmentFile=/opt/developmentloop/current/build.env
+EnvironmentFile=/opt/developmentloop/current/developmentloop.env
+ExecStart=/usr/local/bin/node server.js
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

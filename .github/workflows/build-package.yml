@@ -1,0 +1,268 @@
+# Server package build. Builds a zip of the app with its dependencies for Linux
+# servers, then pushes it to Octopus and creates a release.
+#
+# This is the server path. The container path is build-image.yml. The two share
+# the app code and the database packages. They do not share a version line.
+#
+# Version line: 1.1.<run> on main. The container line is 1.0.<run>. Separate lines
+# keep a package version from colliding with an image version.
+#
+# What one run produces, all at one version:
+#   developmentloop-app        zip of src/ with production node_modules and deploy/server/
+#   developmentloop-app-sbom   SPDX SBOM of exactly what is in the zip
+#   developmentloop-flyway     zip of db/migrations
+# Provenance attestation covers all three zips on main.
+# Verify after a run:
+#   gh attestation verify packaging/developmentloop-app.<version>.zip --repo <owner>/<repo>
+#
+# The Node.js runtime is NOT in the package. It lives on the server. The SBOM
+# covers app dependencies only. The deployment checks the runtime separately.
+#
+# Octopus project comes from the OCTOPUS_SERVER_PROJECT repo variable. When it is
+# unset, "PT - Linux Package" is used.
+
+name: Build package
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "src/**"
+      - "db/migrations/**"
+      - "deploy/server/**"
+      - ".github/workflows/build-package.yml"
+
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run: build and package only. Skip push, attestation, and release."
+        type: boolean
+        default: false
+        required: false
+
+permissions:
+  contents: read
+  attestations: write  # store provenance attestations
+  id-token: write      # OIDC for attest-build-provenance and the Octopus login
+
+env:
+  APP_PACKAGE: developmentloop-app
+  SBOM_PACKAGE: developmentloop-app-sbom
+  FLYWAY_PACKAGE: developmentloop-flyway
+  # Neither value is a secret. The service account only trusts tokens issued to this repo.
+  OCTOPUS_SERVER_URL: https://creid.octopus.app
+  OCTOPUS_SERVICE_ACCOUNT_ID: d7b6439c-edd8-4f5c-b035-ad3a647807b4
+  NODE_VERSION: "24.22.1"
+  VERSION_MAJOR: "1"
+  VERSION_MINOR: "1"
+
+jobs:
+  package:
+    name: Build and push packages
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      is_release: ${{ steps.meta.outputs.is_release }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # ── Step 1: Version ──────────────────────────────────────────────────────
+      # main gets a stable version. Other branches get a pre-release version.
+      - name: Compute build metadata
+        id: meta
+        run: |
+          BRANCH="$GITHUB_REF_NAME"
+          if [[ "$BRANCH" == "main" ]]; then
+            VERSION="${VERSION_MAJOR}.${VERSION_MINOR}.${{ github.run_number }}"
+            IS_RELEASE="true"
+          else
+            SAFE_BRANCH=$(echo "$BRANCH" | sed 's|[^a-zA-Z0-9]|-|g' | tr '[:upper:]' '[:lower:]')
+            VERSION="0.0.0-${SAFE_BRANCH}.${{ github.run_number }}"
+            IS_RELEASE="false"
+          fi
+          {
+            echo "version=$VERSION"
+            echo "branch=$BRANCH"
+            echo "built_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+            echo "is_release=$IS_RELEASE"
+          } >> "$GITHUB_OUTPUT"
+
+      # ── Step 2: Install production dependencies ──────────────────────────────
+      # Same Node.js version the app servers run. --omit=dev keeps test tools out.
+      # --no-bin-links skips the .bin symlinks, which a zip cannot carry.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install production dependencies
+        working-directory: src
+        run: npm ci --omit=dev --no-bin-links
+
+      # ── Step 3: Assemble the package folder ──────────────────────────────────
+      # App code and node_modules from src/, plus the server scripts and env
+      # template from deploy/server/. build.env carries what the container build
+      # bakes into ENV, so /health reports the same fields on both paths.
+      - name: Assemble package folder
+        run: |
+          mkdir dist
+          cp -r src/. dist/
+          # Tests do not ship to servers.
+          rm -rf dist/test
+          cp deploy/server/service.sh \
+             deploy/server/PostDeploy.sh \
+             deploy/server/developmentloop.env \
+             deploy/server/developmentloop.service \
+             dist/
+          cat > dist/build.env <<EOF
+          APP_VERSION=${{ steps.meta.outputs.version }}
+          APP_BRANCH=${{ steps.meta.outputs.branch }}
+          APP_BUILD=${{ github.run_number }}
+          APP_BUILT_AT=${{ steps.meta.outputs.built_at }}
+          APP_COMMIT_SHA=${{ github.sha }}
+          EOF
+          echo "Package folder:"
+          ls -la dist | head -30
+          cat dist/build.env
+
+      # ── Step 4: SBOM of what ships ───────────────────────────────────────────
+      # Scans the package folder, not the repository. The SBOM lists exactly the
+      # dependencies inside the zip.
+      - name: Generate SBOM (SPDX)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: 'fs'
+          format: 'spdx-json'
+          output: 'sbom.spdx.json'
+          scan-ref: 'dist'
+
+      # ── Step 5: Zip the packages ─────────────────────────────────────────────
+      - name: Package app
+        id: app_package
+        uses: OctopusDeploy/create-zip-package-action@v4
+        with:
+          package_id: '${{ env.APP_PACKAGE }}'
+          version: '${{ steps.meta.outputs.version }}'
+          output_folder: './packaging'
+          base_path: 'dist'
+          files: '**/*'
+
+      - name: Package SBOM
+        id: sbom_package
+        uses: OctopusDeploy/create-zip-package-action@v4
+        with:
+          package_id: '${{ env.SBOM_PACKAGE }}'
+          version: '${{ steps.meta.outputs.version }}'
+          output_folder: './packaging'
+          base_path: '.'
+          files: 'sbom.spdx.json'
+
+      - name: Package Flyway migrations
+        id: flyway_package
+        uses: OctopusDeploy/create-zip-package-action@v4
+        with:
+          package_id: '${{ env.FLYWAY_PACKAGE }}'
+          version: '${{ steps.meta.outputs.version }}'
+          output_folder: './packaging'
+          base_path: 'db/migrations'
+          files: '*.sql'
+
+      # ── Step 6: Attest provenance ────────────────────────────────────────────
+      # One attestation covers all three zips. A swapped SBOM or app package
+      # fails verification. Main builds only.
+      - name: Attest build provenance
+        if: inputs.dry_run != true && steps.meta.outputs.is_release == 'true'
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: 'packaging/*.zip'
+
+      # ── Step 7: Push to Octopus ──────────────────────────────────────────────
+      # IgnoreIfExists keeps a package version immutable. A re-run of the job
+      # reuses the pushed packages instead of replacing them.
+      - name: Log in to Octopus Deploy
+        if: inputs.dry_run != true
+        uses: OctopusDeploy/login@v2
+        with:
+          server: ${{ env.OCTOPUS_SERVER_URL }}
+          service_account_id: ${{ env.OCTOPUS_SERVICE_ACCOUNT_ID }}
+
+      - name: Push packages to Octopus
+        if: inputs.dry_run != true
+        uses: OctopusDeploy/push-package-action@v4
+        with:
+          space: ${{ secrets.OCTOPUS_SPACE }}
+          packages: |
+            ${{ steps.app_package.outputs.package_file_path }}
+            ${{ steps.sbom_package.outputs.package_file_path }}
+            ${{ steps.flyway_package.outputs.package_file_path }}
+          overwrite_mode: IgnoreIfExists
+
+      - name: Push build information
+        if: inputs.dry_run != true
+        uses: OctopusDeploy/push-build-information-action@v4
+        with:
+          space: ${{ secrets.OCTOPUS_SPACE }}
+          packages: |
+            ${{ env.APP_PACKAGE }}
+            ${{ env.SBOM_PACKAGE }}
+            ${{ env.FLYWAY_PACKAGE }}
+          version: ${{ steps.meta.outputs.version }}
+          overwrite_mode: OverwriteExisting
+
+      - name: Package summary
+        if: always()
+        run: |
+          {
+            echo "### Packages: \`${{ steps.meta.outputs.version }}\`"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| **App** | \`${{ env.APP_PACKAGE }}\` |"
+            echo "| **SBOM** | \`${{ env.SBOM_PACKAGE }}\` |"
+            echo "| **Flyway** | \`${{ env.FLYWAY_PACKAGE }}\` |"
+            echo "| **Node.js at build** | \`${{ env.NODE_VERSION }}\` |"
+            if [[ "${{ inputs.dry_run }}" == "true" ]]; then
+              echo "| **Pushed** | dry run, skipped |"
+            else
+              echo "| **Attested** | ${{ steps.meta.outputs.is_release == 'true' && 'yes, all three zips' || 'no (pre-release)' }} |"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ── Octopus release ────────────────────────────────────────────────────────
+  release:
+    name: Release to Octopus
+    needs: package
+    if: inputs.dry_run != true
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Log in to Octopus Deploy
+        uses: OctopusDeploy/login@v2
+        with:
+          server: ${{ env.OCTOPUS_SERVER_URL }}
+          service_account_id: ${{ env.OCTOPUS_SERVICE_ACCOUNT_ID }}
+
+      # package_version applies to every package in the project, so the app,
+      # SBOM, and Flyway packages all resolve to this run's version.
+      - name: Create Octopus release
+        uses: OctopusDeploy/create-release-action@v4
+        with:
+          space: ${{ secrets.OCTOPUS_SPACE }}
+          project: ${{ vars.OCTOPUS_SERVER_PROJECT || 'PT - Linux Package' }}
+          package_version: ${{ needs.package.outputs.version }}
+          release_number: ${{ needs.package.outputs.version }}
+          ignore_existing: true
+          git_ref: ${{ github.ref }}
+          custom_fields: |
+            GH_WORKFLOW_RUN:${{ github.run_id }}
+            GIT_COMMIT_SHA:${{ github.sha }}
+
+      - name: Deploy to Development
+        if: needs.package.outputs.is_release == 'true'
+        uses: OctopusDeploy/deploy-release-action@v4
+        with:
+          space: ${{ secrets.OCTOPUS_SPACE }}
+          project: ${{ vars.OCTOPUS_SERVER_PROJECT || 'PT - Linux Package' }}
+          release_number: ${{ needs.package.outputs.version }}
+          environments: Development
