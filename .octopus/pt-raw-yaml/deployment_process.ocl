@@ -8,6 +8,51 @@ process_template "predeploy-boilerplate" {
     }
 }
 
+step "probe-deployment-mode" {
+    name = "Probe deployment mode"
+
+    action {
+        action_type = "Octopus.Script"
+        notes = "TEMPORARY layer 3 probe. Remove after the deployment mode tests."
+        properties = {
+            Octopus.Action.RunOnServer = "true"
+            Octopus.Action.Script.ScriptBody = <<-EOT
+                echo "DeploymentMode (direct):           #{Octopus.Action[Predeploy Boilerplate-Calculate Deployment Mode].Output.DeploymentMode}"
+                echo "VersionChange (direct):            #{Octopus.Action[Predeploy Boilerplate-Calculate Deployment Mode].Output.VersionChange}"
+                echo "RunOnDeploy (direct):              #{Octopus.Action[Predeploy Boilerplate-Calculate Deployment Mode].Output.RunOnDeploy}"
+                echo "RunOnRedeploy (direct):            #{Octopus.Action[Predeploy Boilerplate-Calculate Deployment Mode].Output.RunOnRedeploy}"
+                echo "RunOnRollback (direct):            #{Octopus.Action[Predeploy Boilerplate-Calculate Deployment Mode].Output.RunOnRollback}"
+                echo "RunOnDeployOrRedeploy (direct):    #{Octopus.Action[Predeploy Boilerplate-Calculate Deployment Mode].Output.RunOnDeployOrRedeploy}"
+                echo "Probe.Condition (via variable):    #{Probe.Condition}"
+                echo "Release #{Octopus.Release.Number}, current #{Octopus.Release.CurrentForEnvironment.Number}, previous #{Octopus.Release.PreviousForEnvironment.Number}"
+                EOT
+            Octopus.Action.Script.ScriptSource = "Inline"
+            Octopus.Action.Script.Syntax = "Bash"
+        }
+        worker_pool = "local-machine"
+    }
+}
+
+step "probe-run-condition" {
+    condition = "Variable"
+    name = "Probe run condition"
+    properties = {
+        Octopus.Step.ConditionVariableExpression = "#{Probe.Condition}"
+    }
+
+    action {
+        action_type = "Octopus.Script"
+        notes = "TEMPORARY layer 3 probe. Remove after the deployment mode tests."
+        properties = {
+            Octopus.Action.RunOnServer = "true"
+            Octopus.Action.Script.ScriptBody = "write_highlight \"Probe.Condition was True, so this step ran\""
+            Octopus.Action.Script.ScriptSource = "Inline"
+            Octopus.Action.Script.Syntax = "Bash"
+        }
+        worker_pool = "local-machine"
+    }
+}
+
 process_template "predeploy-notification" {
     name = "Predeploy Notification"
     process_template_slug = "notifications-predeploy"
