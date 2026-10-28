@@ -5,7 +5,7 @@
 
 CREATE OR REPLACE VIEW items_summary AS
 SELECT
-    1               AS summary_version,
+    2               AS summary_version,
     count(*)        AS item_count,
     max(created_at) AS last_created_at
 FROM items;
