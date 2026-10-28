@@ -15,7 +15,6 @@ step "probe-deployment-mode" {
         action_type = "Octopus.Script"
         notes = "TEMPORARY layer 3 probe. Remove after the deployment mode tests."
         properties = {
-            Octopus.Action.RunOnServer = "true"
             Octopus.Action.Script.ScriptBody = <<-EOT
                 echo "DeploymentMode (direct):           #{Octopus.Action[Predeploy Boilerplate-Calculate Deployment Mode].Output.DeploymentMode}"
                 echo "VersionChange (direct):            #{Octopus.Action[Predeploy Boilerplate-Calculate Deployment Mode].Output.VersionChange}"
@@ -44,7 +43,6 @@ step "probe-run-condition" {
         action_type = "Octopus.Script"
         notes = "TEMPORARY layer 3 probe. Remove after the deployment mode tests."
         properties = {
-            Octopus.Action.RunOnServer = "true"
             Octopus.Action.Script.ScriptBody = "write_highlight \"Probe.Condition was True, so this step ran\""
             Octopus.Action.Script.ScriptSource = "Inline"
             Octopus.Action.Script.Syntax = "Bash"
