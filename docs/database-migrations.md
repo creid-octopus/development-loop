@@ -20,7 +20,7 @@ For the logins and the provisioning runbooks, see [`database-roles.md`](database
 | `Confirm rollback` (`predeploy-boilerplate`) | Rollback only | Manual intervention. Approve to continue, reject to roll forward instead |
 | `Verify database ready` | Every run | Checks the database, the owner, and the app login exist |
 | `Review pending migrations` | Every run | Runs `flyway info` and scans pending files for risky SQL. Read only. A policy can require it because it never skips |
-| `DBA review` | Every rollback, and when the review finds risky SQL | Pauses for approval. The project sets `Postgres.Review.Policy` to `always` on a rollback and `risky` otherwise |
+| `DBA review` | Every rollback, and when the review finds risky SQL or hazards | Pauses for approval. The instructions say why: a rollback, hazards, risky SQL, or the policy. The project sets `Postgres.Review.Policy` to `always` on a rollback and `risky` otherwise |
 | `Flyway - Migrate` | Every run, after any DBA approval | Applies pending migrations |
 | `Lock migration history` | Every run | Revokes writes on `flyway_schema_history` from the app login |
 
