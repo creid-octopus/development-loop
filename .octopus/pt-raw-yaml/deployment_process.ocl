@@ -8,16 +8,6 @@ process_template "predeploy-boilerplate" {
     }
 }
 
-process_template "deployment-mode-debug" {
-    name = "Deployment Mode Debug"
-    process_template_slug = "deployment-mode-debug"
-    version_mask = "1.X"
-
-    parameter "Debug.WorkerPool" {
-        value = "WorkerPools-82"
-    }
-}
-
 process_template "predeploy-notification" {
     name = "Predeploy Notification"
     process_template_slug = "notifications-predeploy"
