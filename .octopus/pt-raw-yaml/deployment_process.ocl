@@ -1,7 +1,21 @@
+process_template "predeploy-boilerplate" {
+    name = "Predeploy Boilerplate"
+    process_template_slug = "predeploy-boilerplate"
+    version_mask = "1.X"
+
+    parameter "Predeploy.WorkerPool" {
+        value = "WorkerPools-82"
+    }
+}
+
 process_template "predeploy-notification" {
     name = "Predeploy Notification"
     process_template_slug = "notifications-predeploy"
     version_mask = "2.X"
+
+    parameter "Slack.Predeploy.RunEnvs" {
+        value = "Environments-4"
+    }
 }
 
 process_template "verify-database-ready" {
@@ -69,7 +83,7 @@ process_template "run-flyway-migrations" {
     }
 
     parameter "Postgres.Review.Policy" {
-        value = "risky"
+        value = "#{if Octopus.Action[Predeploy Boilerplate-Calculate Deployment Mode].Output.DeploymentMode == \"Rollback\"}always#{else}risky#{/if}"
     }
 }
 
@@ -182,6 +196,7 @@ process_template "deploy-developmentloop" {
     parameter "KubernetesYaml.StructuredVariableFiles" {
         value = "**/deployment.yaml"
     }
+
     parameter "KubernetesYaml.TargetTag" {
         value = "k8s-agent"
     }
@@ -207,7 +222,6 @@ step "show-app-url" {
     action {
         action_type = "Octopus.Script"
         properties = {
-            Octopus.Action.RunOnServer = "true"
             Octopus.Action.Script.ScriptBody = <<-EOT
                 write_highlight "[Open #{Octopus.Project.Name} in #{Octopus.Environment.Name}](#{Project.Environment.Url})"
                 write_highlight "Health check: [#{Project.Environment.Url}/health/db](#{Project.Environment.Url}/health/db)"

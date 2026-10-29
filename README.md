@@ -43,7 +43,8 @@ The `nonprod` ApplicationSets cover Development and Test. The `prod` Application
 ├── scripts/
 │   ├── migrate.sh        # Flyway Community against any Postgres
 │   ├── scan-migrations.sh  # text scan for risky SQL
-│   ├── check-k8s-health.sh # /health/db on every track and environment
+│   ├── check-k8s-health.sh # /health/db on every container track and environment
+│   ├── check-server-health.sh # /health/db on the Linux server path
 │   └── test-local.sh     # checks the local loop end to end
 ├── observability/        # Collector, Prometheus, Tempo, and Grafana config
 ├── Dockerfile            # multi-stage: --target debug (node:24-slim)
@@ -58,7 +59,7 @@ The `nonprod` ApplicationSets cover Development and Test. The `prod` Application
 ├── argocd/               # ApplicationSets: nonprod/, prod/
 ├── tools/
 │   └── traffic-job.yaml  # one-off traffic generator for demos
-├── docs/                 # attestation, scanning, and workflow decisions
+├── docs/                 # attestation, scanning, database, and workflow decisions
 ├── agent-files/
 │   └── plan.md           # the v2 plan
 ├── AGENTS.md             # rules for coding agents (CLAUDE.md imports it)
@@ -138,7 +139,7 @@ docker compose --profile traffic up traffic     # optional steady traffic
 
 Open the app at `http://localhost:3001` and Grafana at `http://localhost:3100`.
 
-The app reads its database from `DATABASE_URL`, or from the standard `PG*` variables. Pointing it at another database is a change of environment, not code. On Kubernetes the app uses the `PG*` variables and connects as a login that cannot change tables. See [`docs/database-roles.md`](docs/database-roles.md) for the role split and the provisioning runbooks. See [`docs/local-development.md`](docs/local-development.md) for what each service does, how to swap the database, and how to fix common failures.
+The app reads its database from `DATABASE_URL`, or from the standard `PG*` variables. Pointing it at another database is a change of environment, not code. On Kubernetes the app uses the `PG*` variables and connects as a login that cannot change tables. See [`docs/database-roles.md`](docs/database-roles.md) for the role split and the provisioning runbooks. See [`docs/database-migrations.md`](docs/database-migrations.md) for how migrations behave on deploy, redeploy, and rollback, and why rollback is a last resort. See [`docs/local-development.md`](docs/local-development.md) for what each service does, how to swap the database, and how to fix common failures.
 
 Run the unit tests (no Docker needed):
 

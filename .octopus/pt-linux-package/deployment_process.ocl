@@ -1,3 +1,13 @@
+process_template "predeploy-boilerplate" {
+    name = "Predeploy Boilerplate"
+    process_template_slug = "predeploy-boilerplate"
+    version_mask = "1.X"
+
+    parameter "Predeploy.WorkerPool" {
+        value = "WorkerPools-82"
+    }
+}
+
 process_template "predeploy-notification" {
     name = "Predeploy Notification"
     process_template_slug = "notifications-predeploy"
@@ -104,7 +114,7 @@ process_template "run-flyway-migrations" {
     }
 
     parameter "Postgres.Review.Policy" {
-        value = "risky"
+        value = "#{if Octopus.Action[Predeploy Boilerplate-Calculate Deployment Mode].Output.DeploymentMode == \"Rollback\"}always#{else}risky#{/if}"
     }
 }
 
