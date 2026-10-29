@@ -2,7 +2,7 @@
 
 This repo holds developmentloop v2. It's a small Kubernetes service with a Postgres database. The service shows the Octopus Deploy golden path from build to Production.
 
-The full plan lives in the [developmentloop v2 plan](./agent-files/plan.md) doc. Read the layer you're working on before you change anything.
+The full plan lives in the [developmentloop v2 plan](./agent-files/plan.md) doc. Read the Status section first. Then read the layer you're working on before you change anything.
 
 ## Related repos
 
@@ -37,7 +37,8 @@ docker compose up --build                # database, migrations, app, telemetry
 scripts/test-local.sh                    # end to end check of the local loop
 scripts/migrate.sh info                  # Flyway against DATABASE_URL, read only
 scripts/scan-migrations.sh               # scan migrations for risky SQL
-scripts/check-k8s-health.sh              # /health/db on every track and environment (needs the port-forward)
+scripts/check-k8s-health.sh              # /health/db on every container track and environment (needs the port-forward)
+scripts/check-server-health.sh           # /health/db on the Linux server path, ports 3101 to 3103
 ```
 
 Local details: [`docs/local-development.md`](docs/local-development.md).
