@@ -14,21 +14,6 @@ The full plan lives in the [developmentloop v2 plan](./agent-files/plan.md) doc.
 
 Deployment process changes go in `octopus-base-infrastructure` as process templates. Each Octopus project in this repo has a Config as Code folder in `.octopus/`. Those folders compose published templates. Don't add inline steps to them unless the plan says to.
 
-## Layout
-
-```
-src/            App code (Node 24, Express)
-db/migrations/  Flyway migrations (V__ and R__ files)
-k8s/            Kubernetes manifests (raw, kustomize, helm)
-.octopus/       Config as Code, one folder per Octopus project
-                pt-raw-yaml/, pt-kustomize/, pt-helm/, pt-linux-package/
-deploy/server/  Files that ship inside the server package (scripts, env template, systemd unit)
-.github/        GitHub Actions workflows
-docs/           Notes and decisions
-```
-
-Update this tree when the layout changes.
-
 ## Commands
 
 ```bash
@@ -52,7 +37,7 @@ Local details: [`docs/local-development.md`](docs/local-development.md).
 
 ### Database
 
-- Every schema change is a Flyway migration in `db/migrations/`. Never edit a migration that has shipped.
+- Every schema change is a Flyway migration in `db/migrations/`. Never edit a migration that has shipped. An applied `R__` file can't be deleted without a `flyway repair`. How migrations behave on deploy, redeploy, and rollback: [`docs/database-migrations.md`](docs/database-migrations.md).
 - Write migrations as expand and contract. The previous app version must still work against the new schema.
 - Never put a destructive change (`DROP`, column rename, `NOT NULL` without a default) in the same release as the code that stops using it.
 - Each tenant gets its own database. The tenant key names the database and the user.
@@ -66,7 +51,9 @@ Local details: [`docs/local-development.md`](docs/local-development.md).
 
 ### Rollbacks
 
-- Rollback means redeploying an older release. Database steps skip on rollback through `RunOnDeploy` run conditions.
+- Roll forward by default. Rollback means redeploying an older release, and it's a last resort.
+- A rollback pauses twice: `Confirm rollback` in `predeploy-boilerplate`, then the DBA review before migrate. Keep `predeploy-boilerplate` first in every process, and keep the rollback expression on `Postgres.Review.Policy`.
+- Migrate still runs on a rollback after DBA approval. It never undoes versioned migrations, and it can apply older `R__` files again.
 - Don't write Flyway undo scripts unless a task asks for them.
 
 ### Observability
