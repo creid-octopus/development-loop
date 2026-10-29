@@ -126,7 +126,7 @@ process_template "run-flyway-migrations" {
     }
 
     parameter "Postgres.Review.Policy" {
-        value = "risky"
+        value = "#{if Octopus.Action[Predeploy Boilerplate-Calculate Deployment Mode].Output.DeploymentMode == \"Rollback\"}always#{else}risky#{/if}"
     }
 }
 
