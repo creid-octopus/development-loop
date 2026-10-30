@@ -56,11 +56,30 @@ The step is safe to run on every deployment. The first deployment to a new datab
 
 The raw YAML, Helm, and Kustomize tracks deploy the same app. Each track has its own Octopus project. All three use one database and one pair of app and owner logins in each environment. Provisioning one track provisions the others. Deprovisioning any track removes the database for all three.
 
+Pull request environments are the exception. Each track gets its own database and logins for each `pr-<number>` environment, because each project creates and tears down its own ephemeral environments.
+
+## How the names are built
+
+The database and login names come from a chain of variables:
+
+1. `Helper.EnvironmentLowerCase` is the environment name in lower case, such as `development` or `pr-12`.
+2. `Helper.PostgresEnvironmentName` is the part of the name that changes per environment.
+   - Development, Test, and Production: the same as `Helper.EnvironmentLowerCase`.
+   - Pull request environments (scoped to the `Ephemeral Testing` parent): the track, then the environment name with `-` replaced by `_`, such as `helm_pr_12`.
+3. `Project.Postgres.DatabaseName`, `OwnerRole`, and `AppRole` add the `developmentloop_`, `developmentloop_owner_`, and `developmentloop_app_` prefixes.
+
+| Environment | Database | Owner login | App login |
+| --- | --- | --- | --- |
+| Development | `developmentloop_development` | `developmentloop_owner_development` | `developmentloop_app_development` |
+| `pr-12`, Helm track | `developmentloop_helm_pr_12` | `developmentloop_owner_helm_pr_12` | `developmentloop_app_helm_pr_12` |
+
+Pull request environments use the owner and app passwords scoped to `Ephemeral Testing` in `CommonPostgresVariables`, so every pull request shares the same pair.
+
 ## Project variables
 
 | Variable | Kind | Notes |
 | --- | --- | --- |
-| `Project.Postgres.OwnerRole` | Text | `developmentloop_owner_<env>` |
+| `Project.Postgres.OwnerRole` | Text | `developmentloop_owner_<env>`. See [How the names are built](#how-the-names-are-built) |
 | `Project.Postgres.AppRole` | Text | `developmentloop_app_<env>` |
 | `Project.Postgres.OwnerPassword` | Sensitive | Set in the Octopus UI. Not in Config as Code |
 | `Project.Postgres.AppPassword` | Sensitive | Set in the Octopus UI. Not in Config as Code |

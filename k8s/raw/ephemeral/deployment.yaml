@@ -1,0 +1,121 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: raw-developmentloop-demo
+  labels:
+    app: raw-developmentloop-demo
+    app.kubernetes.io/environment: "#{Octopus.Environment.Name}"
+  namespace: "#{Project.Kubernetes.NamespaceName}"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: raw-developmentloop-demo
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1       # one extra pod during rollout
+      maxUnavailable: 0  # never drop below desired count
+  template:
+    metadata:
+      labels:
+        app: raw-developmentloop-demo
+        app.kubernetes.io/environment: "#{Octopus.Environment.Name}"
+      annotations:
+        ad.datadoghq.com/raw-developmentloop-demo: |
+          checks:
+            http_check:
+              - init_config:
+                instances:
+                  - name: pod health
+                    url: "http://%%host%%:3000/health"
+                    timeout: 1
+    spec:
+      containers:
+        - name: raw-developmentloop-demo
+          # Image reference — updated by Octopus/ArgoCD at deploy time.
+          # For Octopus structured variable substitution: ghcr.io/<owner>/sample-webapp:#{Octopus.Release.Number}
+          # For ArgoCD image updater: annotate with argocd-image-updater.argoproj.io/image-list
+          image: ghcr.io/creid-octopus/development-loop:latest
+          ports:
+            - containerPort: 3000
+          env:
+            # OpenTelemetry. The app sends OTLP to the Datadog Agent on its own node.
+            # Version and environment come from APP_VERSION (baked into the image)
+            # and APP_ENV (ConfigMap), so no per-release edits are needed here.
+            - name: HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: OTEL_SERVICE_NAME
+              value: "raw-developmentloop-demo"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://$(HOST_IP):4318"
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: "http/protobuf"
+            - name: OTEL_TRACES_EXPORTER
+              value: "otlp"
+            - name: OTEL_METRICS_EXPORTER
+              value: "otlp"
+            - name: OTEL_LOGS_EXPORTER
+              value: "none"
+            # Skip the "host" detector. Otherwise host.name is the pod name and
+            # Datadog treats every pod as a separate host. The agent fills in the
+            # real node name instead.
+            - name: OTEL_NODE_RESOURCE_DETECTORS
+              value: "env,process"
+            # Runtime identity — set per environment via ConfigMap or Octopus variable substitution.
+            - name: APP_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: raw-developmentloop-demo-config
+                  key: APP_ENV
+            # Database connection. Host, port, database, and user come from the
+            # ConfigMap. The password comes from the developmentloop-db Secret,
+            # which the secrets/ step applies before this deployment.
+            - name: PGHOST
+              valueFrom:
+                configMapKeyRef:
+                  name: raw-developmentloop-demo-config
+                  key: PGHOST
+            - name: PGPORT
+              valueFrom:
+                configMapKeyRef:
+                  name: raw-developmentloop-demo-config
+                  key: PGPORT
+            - name: PGDATABASE
+              valueFrom:
+                configMapKeyRef:
+                  name: raw-developmentloop-demo-config
+                  key: PGDATABASE
+            - name: PGUSER
+              valueFrom:
+                configMapKeyRef:
+                  name: raw-developmentloop-demo-config
+                  key: PGUSER
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: developmentloop-db
+                  key: PGPASSWORD
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health/db
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3

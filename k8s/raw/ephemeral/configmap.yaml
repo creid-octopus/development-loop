@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: raw-developmentloop-demo-config
+  namespace: "#{Project.Kubernetes.NamespaceName}"
+data:
+  # property-like keys; each key maps to a simple value
+  APP_ENV: "#{Octopus.Environment.Name}"
+  # Database connection. Octopus replaces the #{...} values at deploy time.
+  # The password comes from the developmentloop-db Secret.
+  PGHOST: "#{Project.Postgres.AppHost}"
+  PGPORT: "#{Project.Postgres.Port}"
+  PGDATABASE: "#{Project.Postgres.DatabaseName}"
+  PGUSER: "#{Project.Postgres.AppRole}"

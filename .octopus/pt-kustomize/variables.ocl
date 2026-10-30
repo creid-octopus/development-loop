@@ -3,11 +3,11 @@ variable "Project.Postgres.Port" {
 }
 
 variable "Project.Postgres.OwnerRole" {
-    value "developmentloop_owner_#{Helper.EnvironmentLowerCase}" {}
+    value "developmentloop_owner_#{Helper.PostgresEnvironmentName}" {}
 }
 
 variable "Project.Postgres.AppRole" {
-    value "developmentloop_app_#{Helper.EnvironmentLowerCase}" {}
+    value "developmentloop_app_#{Helper.PostgresEnvironmentName}" {}
 }
 
 variable "Project.Postgres.Host" {
@@ -15,15 +15,31 @@ variable "Project.Postgres.Host" {
 }
 
 variable "Project.Postgres.DatabaseName" {
-    value "developmentloop_#{Helper.EnvironmentLowerCase}" {}
+    value "developmentloop_#{Helper.PostgresEnvironmentName}" {}
 }
 
 variable "Helper.EnvironmentLowerCase" {
     value "#{Octopus.Environment.Name | ToLower}" {}
 }
 
+variable "Helper.PostgresEnvironmentName" {
+    value "#{Helper.EnvironmentLowerCase}" {}
+
+    value "kustomize_#{Helper.EnvironmentLowerCase | Replace \"-\" \"_\"}" {
+        environment = ["ephemeral-testing"]
+    }
+}
+
 variable "Project.Kubernetes.RepositoryUrl" {
     value "https://github.com/creid-octopus/development-loop" {}
+}
+
+variable "Project.Kubernetes.RawManifestDirectory" {
+    value "k8s/raw/#{Helper.EnvironmentLowerCase}" {}
+
+    value "k8s/raw/ephemeral" {
+        environment = ["ephemeral-testing"]
+    }
 }
 
 variable "Project.Kubernetes.NamespaceName" {

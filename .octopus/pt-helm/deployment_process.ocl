@@ -155,7 +155,7 @@ process_template "create-application-secrets" {
     }
 
     parameter "KuberenetesYaml.GitRepositoryFilePath" {
-        value = "k8s/raw/#{Helper.EnvironmentLowerCase}/secrets/*"
+        value = "#{Project.Kubernetes.RawManifestDirectory}/secrets/*"
     }
 
     parameter "KubernetesYaml.GitRepositoryUrl" {
@@ -199,6 +199,10 @@ process_template "deploy-developmentloop" {
 
     parameter "Helm.ValuesFilePath" {
         value = "#{Project.Helm.ValuesFilePath}"
+    }
+
+    parameter "Helm.UpgradeCommandParameters" {
+        value = "#{Project.Helm.UpgradeArgs}"
     }
 
     parameter "Helm.TargetTag" {

@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: raw-developmentloop-demo
+  labels:
+    app: raw-developmentloop-demo
+  namespace: "#{Project.Kubernetes.NamespaceName}"
+spec:
+  type: ClusterIP
+  selector:
+    app: raw-developmentloop-demo
+  ports:
+    - name: http
+      port: 80
+      targetPort: 3000
+  # Reached through the Ingress in ingress.yaml.

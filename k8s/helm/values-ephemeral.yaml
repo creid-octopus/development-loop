@@ -1,0 +1,10 @@
+# Helm values for pull request (ephemeral) environments.
+# One file serves every pr-<number> environment. Octopus doesn't substitute
+# variables in values files, so the values that change per pull request
+# (namespace, appEnv, database name and user, ingress host) come from
+# --set arguments in Project.Helm.UpgradeArgs.
+
+image: ghcr.io/creid-octopus/development-loop:latest
+
+trafficBaseline:
+  enabled: false

@@ -65,8 +65,8 @@ Resource names are identical across all approaches and environments (e.g. `devel
 
 All three approaches represent the same application. A change to the app must be reflected in all three:
 
-- **Raw YAML:** Edit the YAML file in each `k8s/raw/<env>/` directory.
-- **Helm:** Edit `k8s/helm/templates/*.yaml` and update `k8s/helm/values.yaml` if adding new configurable fields.
+- **Raw YAML:** Edit the YAML file in each `k8s/raw/<env>/` directory, and in `k8s/raw/ephemeral/`. The ephemeral folder is a copy of `development/` with the namespace and environment name replaced by Octopus variables, so one folder serves every pull request environment. Argo CD never reads it.
+- **Helm:** Edit `k8s/helm/templates/*.yaml` and update `k8s/helm/values.yaml` if adding new configurable fields. Pull request environments use `values-ephemeral.yaml`. The values that change per pull request come from `--set` arguments in `Project.Helm.UpgradeArgs`, because Octopus doesn't substitute variables in values files.
 - **Kustomize:** Edit `k8s/kustomize/base/*.yaml` (namespace/ConfigMap patches stay in the overlay).
 
 ## ArgoCD Integration
