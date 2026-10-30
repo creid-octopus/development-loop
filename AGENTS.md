@@ -46,7 +46,7 @@ Local details: [`docs/local-development.md`](docs/local-development.md).
 - Roles, databases, and grants come from the `Create and provision Postgres database` runbook, not the deployment. The deployment only verifies them.
 - The app connects as the app user. Never point the app at the owner or admin login.
 - The deployment locks `flyway_schema_history` against writes by the app user right after Flyway runs. Keep the `Lock migration history` step after the migration step.
-- The three delivery tracks share one database per environment. Deprovisioning one track removes the database for all three.
+- The three delivery tracks share one database per environment. Deprovisioning one track removes the database for all three. Pull request environments are the exception: each track gets its own `developmentloop_<track>_pr_<number>` database.
 - Never reuse the admin password for another login.
 
 ### Rollbacks
