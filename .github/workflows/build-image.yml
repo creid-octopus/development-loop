@@ -5,10 +5,15 @@
 #   schedule (weekly, Monday 06:00)   → same as main push, no-cache to force fresh base image pull
 #   workflow_dispatch                  → manual build from any branch; target overridable (use for
 #                                        feature/RC images — pick branch + debug target in the UI)
+#   pull_request (same paths)          → debug target, PR version, release in the Pull Requests
+#                                        channel. Octopus creates pr-<number> and deploys to it.
 #
 # Versioning mirrors publish.yml:
 #   main       → 1.0.<run>            e.g. ghcr.io/org/repo:1.0.42
+#   pull req   → 1.0.<run>-pr-<num>   e.g. ghcr.io/org/repo:1.0.43-pr-12
 #   feature/** → 0.0.0-<slug>.<run>   e.g. ghcr.io/org/repo:0.0.0-feature-foo.42
+# A pull request version keeps a real base version so Calculate Deployment Mode
+# can tell a newer push from an older one in the same pr-<num> environment.
 #
 # Each push produces two tags — a semver tag and a SHA-pinned tag:
 #   :1.0.42                      — human-readable, usable in Octopus feed references
@@ -32,9 +37,14 @@
 # number are all 1.0.<run>, so a release always points at the image it came from.
 # Traceability: build information carries the commit, and the release custom fields
 # GH_WORKFLOW_RUN and GIT_COMMIT_SHA link back to the run and the SHA.
+# AIAssisted is true when a commit in the push or pull request has an AI
+# co-author trailer, or the pull request has the ai-assisted label.
+# Pull request releases also carry PullRequestNumber, which names pr-<num>.
 #
 # Octopus projects come from the OCTOPUS_PROJECTS repo variable (a JSON list of
-# project names). When it is unset the three PT - ArgoCD projects are used.
+# project names). When it is unset the three PT projects are used. Pull request
+# releases go only to projects in OCTOPUS_PR_PROJECTS (default: PT - Helm),
+# because each project needs its own Pull Requests channel first.
 #
 # Future: replace attestation with cosign sign for registry-agnostic signatures.
 
@@ -44,6 +54,15 @@ on:
   push:
     branches:
       - main
+    paths:
+      - "src/**"
+      - "db/migrations/**"
+      - "Dockerfile"
+      - ".dockerignore"
+
+  # Same paths as main. Forks are skipped in the build job: they get no OIDC
+  # token or package write access.
+  pull_request:
     paths:
       - "src/**"
       - "db/migrations/**"
@@ -100,15 +119,21 @@ env:
 jobs:
   build:
     name: Build & push image
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     # The later jobs reuse these so every artifact carries the same version.
     outputs:
       version: ${{ steps.meta.outputs.version }}
       is_release: ${{ steps.meta.outputs.is_release }}
       image_ref: ${{ steps.meta.outputs.image_ref }}
+      ai_assisted: ${{ steps.ai.outputs.ai_assisted }}
 
     steps:
+      # Full history so the AIAssisted check can read every commit in the push
+      # or pull request.
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       # ── Step 1: Compute version, target, and image tags ─────────────────────
       # Branch routing mirrors publish.yml — same version scheme, same slug logic.
@@ -116,7 +141,8 @@ jobs:
       - name: Compute build metadata
         id: meta
         run: |
-          BRANCH="$GITHUB_REF_NAME"
+          # On a pull request GITHUB_REF_NAME is "<num>/merge". Use the head branch.
+          BRANCH="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
           SHORT_SHA="${GITHUB_SHA::7}"
           BUILT_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
@@ -124,6 +150,10 @@ jobs:
             VERSION="${{ env.VERSION_MAJOR }}.${{ env.VERSION_MINOR }}.${{ github.run_number }}"
             BUILD_TARGET="release"
             IS_RELEASE="true"
+          elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            VERSION="${{ env.VERSION_MAJOR }}.${{ env.VERSION_MINOR }}.${{ github.run_number }}-pr-${{ github.event.pull_request.number }}"
+            BUILD_TARGET="debug"
+            IS_RELEASE="false"
           else
             SAFE_BRANCH=$(echo "$BRANCH" | sed 's|[^a-zA-Z0-9]|-|g' | tr '[:upper:]' '[:lower:]')
             VERSION="0.0.0-${SAFE_BRANCH}.${{ github.run_number }}"
@@ -145,6 +175,39 @@ jobs:
           echo "build_target=$BUILD_TARGET" >> "$GITHUB_OUTPUT"
           echo "is_release=$IS_RELEASE"     >> "$GITHUB_OUTPUT"
           echo "image_ref=$IMAGE_REF"       >> "$GITHUB_OUTPUT"
+
+      # ── Step 1b: Detect AI-assisted changes ─────────────────────────────────
+      # Sets the AIAssisted release custom field. True when a commit in the range
+      # has an AI co-author trailer, or the pull request has the ai-assisted label.
+      # Range: the pull request's commits, or the commits in the push. Scheduled
+      # and manual runs have no range, so they report false.
+      - name: Detect AI-assisted changes
+        id: ai
+        env:
+          HAS_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'ai-assisted') }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          RANGE=""
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            RANGE="$PR_BASE..$PR_HEAD"
+          elif [[ "${{ github.event_name }}" == "push" && -n "$PUSH_BEFORE" && ! "$PUSH_BEFORE" =~ ^0+$ ]]; then
+            RANGE="$PUSH_BEFORE..$GITHUB_SHA"
+          fi
+
+          AI_ASSISTED="false"
+          if [[ "$HAS_LABEL" == "true" ]]; then
+            echo "The pull request has the ai-assisted label."
+            AI_ASSISTED="true"
+          elif [[ -n "$RANGE" ]] && git log --format=%B "$RANGE" \
+              | grep -Eiq '^co-authored-by:.*(claude|anthropic|copilot|codex|cursor)'; then
+            echo "A commit in $RANGE has an AI co-author trailer."
+            AI_ASSISTED="true"
+          fi
+
+          echo "AIAssisted: $AI_ASSISTED"
+          echo "ai_assisted=$AI_ASSISTED" >> "$GITHUB_OUTPUT"
 
       # ── Step 2: Set up Buildx ────────────────────────────────────────────────
       # Required for BuildKit features: multi-stage caching and GHA cache backend.
@@ -214,8 +277,10 @@ jobs:
           no-cache: ${{ github.event_name == 'schedule' }}
           push: ${{ inputs.dry_run != true }}
           target: ${{ steps.meta.outputs.build_target }}
+          # latest moves only on main builds, so a pull request or branch build
+          # never replaces it.
           tags: |
-            ${{ steps.meta.outputs.image_ref }}:latest
+            ${{ steps.meta.outputs.is_release == 'true' && format('{0}:latest', steps.meta.outputs.image_ref) || '' }}
             ${{ steps.meta.outputs.image_ref }}:${{ steps.meta.outputs.version }}
             ${{ steps.meta.outputs.image_ref }}:${{ steps.meta.outputs.version }}-sha-${{ steps.meta.outputs.short_sha }}
           build-args: |
@@ -428,7 +493,8 @@ jobs:
       matrix:
         # Override with a repo variable, for example:
         #   ["PT - ArgoCD - Raw YAML"]
-        project: ${{ fromJSON(vars.OCTOPUS_PROJECTS || '["PT - Raw YAML","PT - Kustomize","PT - Helm"]') }}
+        # Pull requests use OCTOPUS_PR_PROJECTS: only projects with a Pull Requests channel.
+        project: ${{ fromJSON(github.event_name == 'pull_request' && (vars.OCTOPUS_PR_PROJECTS || '["PT - Helm"]') || (vars.OCTOPUS_PROJECTS || '["PT - Raw YAML","PT - Kustomize","PT - Helm"]')) }}
 
     steps:
       - name: Log in to Octopus Deploy
@@ -442,6 +508,7 @@ jobs:
       # ignore_existing makes "Re-run jobs" safe: the release number is the
       # version, and a re-run reuses it instead of failing.
       - name: Create Octopus release
+        if: github.event_name != 'pull_request'
         uses: OctopusDeploy/create-release-action@v4
         with:
           space: ${{ secrets.OCTOPUS_SPACE }}
@@ -453,6 +520,28 @@ jobs:
           custom_fields: |
             GH_WORKFLOW_RUN:${{ github.run_id }}
             GIT_COMMIT_SHA:${{ github.sha }}
+            AIAssisted:${{ needs.build.outputs.ai_assisted }}
+
+      # Pull requests: the Pull Requests channel names the ephemeral environment
+      # pr-<PullRequestNumber> and deploys to it automatically, so there is no
+      # deploy step. The process comes from the pull request's head branch, so
+      # OCL changes in the pull request are part of its release.
+      - name: Create Octopus release for the pull request
+        if: github.event_name == 'pull_request'
+        uses: OctopusDeploy/create-release-action@v4
+        with:
+          space: ${{ secrets.OCTOPUS_SPACE }}
+          project: ${{ matrix.project }}
+          channel: Pull Requests
+          package_version: ${{ needs.build.outputs.version }}
+          release_number: ${{ needs.build.outputs.version }}
+          ignore_existing: true
+          git_ref: refs/heads/${{ github.head_ref }}
+          custom_fields: |
+            GH_WORKFLOW_RUN:${{ github.run_id }}
+            GIT_COMMIT_SHA:${{ github.sha }}
+            AIAssisted:${{ needs.build.outputs.ai_assisted }}
+            PullRequestNumber:${{ github.event.pull_request.number }}
 
       # Main builds go to Development. Promotion after that is Octopus's job.
       - name: Deploy to Development
