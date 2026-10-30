@@ -73,3 +73,11 @@ variable "Project.Ingress.Host" {
 variable "Project.Kustomize.OverlayDirectory" {
     value "k8s/kustomize/octopus" {}
 }
+
+variable "Project.Deprovision.Confirm" {
+    value "True" {}
+
+    value "False" {
+        environment = ["ephemeral-testing"]
+    }
+}

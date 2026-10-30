@@ -73,3 +73,11 @@ variable "Project.Environment.Url" {
 variable "Project.Ingress.Host" {
     value "raw-#{Helper.EnvironmentLowerCase}.developmentloop.#{Project.Ingress.Domain}" {}
 }
+
+variable "Project.Deprovision.Confirm" {
+    value "True" {}
+
+    value "False" {
+        environment = ["ephemeral-testing"]
+    }
+}

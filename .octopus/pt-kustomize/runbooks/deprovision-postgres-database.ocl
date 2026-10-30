@@ -14,11 +14,15 @@ run_retention_policy {
 
 process {
     step "confirm-deprovision" {
+        condition = "Variable"
         name = "Confirm deprovision"
+        properties = {
+            Octopus.Step.ConditionVariableExpression = "#{if Project.Deprovision.Confirm == \"False\"}False#{else}True#{/if}"
+        }
 
         action {
             action_type = "Octopus.Manual"
-            notes = "Stops the run until someone approves. Abort to keep the database."
+            notes = "Stops the run until someone approves. Abort to keep the database. Skipped only when Project.Deprovision.Confirm is False, which is set for pull request environments so teardown and expiry can run unattended. A missing variable still pauses."
             properties = {
                 Octopus.Action.Manual.BlockConcurrentDeployments = "False"
                 Octopus.Action.Manual.Instructions = "This deletes the database #{Project.Postgres.DatabaseName} and the roles #{Project.Postgres.AppRole} and #{Project.Postgres.OwnerRole} in #{Octopus.Environment.Name}. All data in the database is lost. Approve to continue. Abort to keep everything."

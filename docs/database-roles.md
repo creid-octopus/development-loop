@@ -100,6 +100,7 @@ Octopus creates the Secret from `k8s/raw/<env>/secrets/database_connection.yaml`
 - The app user has write access on `flyway_schema_history` for a short time. The window runs from table creation to the `Lock migration history` step in the same deployment. A failed migration can leave the table unlocked until the next successful deployment.
 - The lock step assumes the default Flyway table name. Set the `Postgres.History.Table` parameter when Flyway uses a custom name.
 - Resetting an environment loses its data. Run the deprovision runbook, then the provision runbook, then deploy. The deprovision steps refuse to run in Production.
+- The deprovision runbook pauses at `Confirm deprovision` before it drops anything. Pull request environments skip the pause (`Project.Deprovision.Confirm` is `False` in `Ephemeral Testing`), so teardown on close and inactivity expiry run unattended. Any other value, or a missing variable, keeps the pause.
 - Password rotation is a runbook run. A deployment no longer resets the passwords.
 
 ## Why not create the database in the deployment
