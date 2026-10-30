@@ -40,6 +40,8 @@
 # AIAssisted is true when a commit in the push or pull request has an AI
 # co-author trailer, or the pull request has the ai-assisted label.
 # Pull request releases also carry PullRequestNumber, which names pr-<num>.
+# The skip-ephemeral label skips the pull request release (see the release job).
+# pr-environment-teardown.yml deprovisions pr-<num> when the pull request closes.
 #
 # Octopus projects come from the OCTOPUS_PROJECTS repo variable (a JSON list of
 # project names). When it is unset the three PT projects are used. Pull request
@@ -491,10 +493,13 @@ jobs:
   # ── Octopus release ────────────────────────────────────────────────────────
   # One job per Octopus project. fail-fast is off so a project that does not
   # exist yet does not stop the others.
+  # A pull request with the skip-ephemeral label still builds and pushes its
+  # packages, but gets no release, so Octopus creates no pr-<num> environment.
+  # The label is read when the workflow starts: add it before the next push.
   release:
     name: Release to ${{ matrix.project }}
     needs: [build, octopus-packages]
-    if: inputs.dry_run != true
+    if: inputs.dry_run != true && !contains(github.event.pull_request.labels.*.name, 'skip-ephemeral')
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
