@@ -1,0 +1,80 @@
+# Pull request environment teardown — deprovisions pr-<number> when a pull
+# request closes, merged or not.
+#
+# Each project in OCTOPUS_PR_PROJECTS (default: PT - Helm) has its own
+# ephemeral environment for the pull request. Deprovisioning runs that
+# project's deprovisioning runbook, which drops the pull request's database
+# and logins. The Kubernetes namespace stays until the shared-environment
+# question is settled (see the layer 6 plan).
+#
+# A project with no pr-<number> environment is skipped. That covers pull
+# requests labeled skip-ephemeral from the start, and environments that
+# already expired.
+#
+# Inactivity expiry in Octopus is the backstop when this workflow doesn't run.
+
+name: Tear down pull request environment
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: read
+  id-token: write   # OIDC login to Octopus
+
+env:
+  # Neither value is a secret: the service account only trusts tokens issued
+  # to this repo, as configured in Octopus.
+  OCTOPUS_SERVER_URL: https://creid.octopus.app
+  OCTOPUS_SERVICE_ACCOUNT_ID: d7b6439c-edd8-4f5c-b035-ad3a647807b4
+  OCTOPUS_CLI_VERSION: "2.31.1"
+
+jobs:
+  deprovision:
+    name: Deprovision pr-${{ github.event.pull_request.number }} in ${{ matrix.project }}
+    # Forks get no OIDC token, and build-image.yml never created an environment for them.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project: ${{ fromJSON(vars.OCTOPUS_PR_PROJECTS || '["PT - Helm"]') }}
+
+    steps:
+      - name: Log in to Octopus Deploy
+        uses: OctopusDeploy/login@v2
+        with:
+          server: ${{ env.OCTOPUS_SERVER_URL }}
+          service_account_id: ${{ env.OCTOPUS_SERVICE_ACCOUNT_ID }}
+
+      # The CLI reads OCTOPUS_URL and OCTOPUS_ACCESS_TOKEN from the login step.
+      - name: Install Octopus CLI
+        uses: OctopusDeploy/install-octopus-cli-action@v4
+        with:
+          version: ${{ env.OCTOPUS_CLI_VERSION }}
+
+      # `octopus environment list` doesn't return ephemeral environments, so
+      # this reads the v2 environments API. partialName=pr-9 also matches pr-99,
+      # so the name is matched exactly.
+      - name: Deprovision the environment
+        env:
+          SPACE: ${{ secrets.OCTOPUS_SPACE }}
+          PROJECT: ${{ matrix.project }}
+          ENVIRONMENT: pr-${{ github.event.pull_request.number }}
+        run: |
+          SPACE_ID=$(octopus space view "$SPACE" -f json | jq -r '.Id')
+          FOUND=$(octopus api "/api/$SPACE_ID/environments/v2?partialName=$ENVIRONMENT&skip=0&take=100" \
+            | jq -r --arg name "$ENVIRONMENT" '[.Items[] | select(.Name == $name and .Type == "Ephemeral")] | length')
+
+          if [[ "$FOUND" == "0" ]]; then
+            echo "No ephemeral environment named $ENVIRONMENT. Nothing to deprovision."
+            exit 0
+          fi
+
+          echo "Deprovisioning $ENVIRONMENT for $PROJECT"
+          octopus ephemeral-environment deprovision-project \
+            --space "$SPACE" \
+            --project "$PROJECT" \
+            --name "$ENVIRONMENT" \
+            --no-prompt
