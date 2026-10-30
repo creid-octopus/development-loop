@@ -60,14 +60,19 @@ on:
       - "Dockerfile"
       - ".dockerignore"
 
-  # Same paths as main. Forks are skipped in the build job: they get no OIDC
-  # token or package write access.
+  # The main paths, plus the chart, manifests, process, and this workflow: a
+  # pull request environment deploys those from the pull request's branch.
+  # Forks are skipped in the build job: they get no OIDC token or package
+  # write access.
   pull_request:
     paths:
       - "src/**"
       - "db/migrations/**"
       - "Dockerfile"
       - ".dockerignore"
+      - "k8s/**"
+      - ".octopus/**"
+      - ".github/workflows/build-image.yml"
 
   # Weekly scheduled rebuild — ensures upstream OS patches in the base image
   # (node:24-slim, distroless) are picked up even when no code has changed.
@@ -478,6 +483,9 @@ jobs:
             ${{ env.SBOM_PACKAGE }}
             ${{ env.FLYWAY_PACKAGE }}
           version: ${{ needs.build.outputs.version }}
+          # On a pull request the default is refs/pull/<num>/merge. Use the head branch.
+          # Commits only come from push events, so pull request builds list none.
+          branch: ${{ github.head_ref || github.ref_name }}
           overwrite_mode: OverwriteExisting
 
   # ── Octopus release ────────────────────────────────────────────────────────
@@ -496,12 +504,38 @@ jobs:
         # Pull requests use OCTOPUS_PR_PROJECTS: only projects with a Pull Requests channel.
         project: ${{ fromJSON(github.event_name == 'pull_request' && (vars.OCTOPUS_PR_PROJECTS || '["PT - Helm"]') || (vars.OCTOPUS_PROJECTS || '["PT - Raw YAML","PT - Kustomize","PT - Helm"]')) }}
 
+    env:
+      # Steps with Git resources (the chart or manifests), by project. A pull
+      # request release points them at the pull request's branch, so chart and
+      # manifest changes reach its environment. Names are the expanded step
+      # names: <usage name>-<template step name>.
+      PR_GIT_RESOURCE_STEPS: >-
+        {
+          "PT - Helm": ["Create application secrets-Deploy YAML", "Deploy developmentloop with Helm-Deploy a Helm Chart"],
+          "PT - Kustomize": ["Create application secrets-Deploy YAML", "Deploy developmentloop with Kustomize-Deploy with Kustomize"],
+          "PT - Raw YAML": ["Create application secrets-Deploy YAML", "Deploy developmentloop-Deploy YAML"]
+        }
+
     steps:
       - name: Log in to Octopus Deploy
         uses: OctopusDeploy/login@v2
         with:
           server: ${{ env.OCTOPUS_SERVER_URL }}
           service_account_id: ${{ env.OCTOPUS_SERVICE_ACCOUNT_ID }}
+
+      # One StepName:GitRef line per Git resource step in this project.
+      - name: Git resources for the pull request
+        id: git_resources
+        if: github.event_name == 'pull_request'
+        env:
+          PROJECT: ${{ matrix.project }}
+          GIT_REF: refs/heads/${{ github.head_ref }}
+        run: |
+          {
+            echo "list<<EOF"
+            jq -r --arg p "$PROJECT" --arg ref "$GIT_REF" '.[$p] // [] | .[] | "\(.):\($ref)"' <<<"$PR_GIT_RESOURCE_STEPS"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       # package_version applies to every package in the project, so the image,
       # SBOM, and Flyway packages all resolve to this run's version.
@@ -537,9 +571,11 @@ jobs:
           release_number: ${{ needs.build.outputs.version }}
           ignore_existing: true
           git_ref: refs/heads/${{ github.head_ref }}
+          git_resources: ${{ steps.git_resources.outputs.list }}
+          # The head commit, not GitHub's merge commit, so it matches the branch.
           custom_fields: |
             GH_WORKFLOW_RUN:${{ github.run_id }}
-            GIT_COMMIT_SHA:${{ github.sha }}
+            GIT_COMMIT_SHA:${{ github.event.pull_request.head.sha }}
             AIAssisted:${{ needs.build.outputs.ai_assisted }}
             PullRequestNumber:${{ github.event.pull_request.number }}
 
