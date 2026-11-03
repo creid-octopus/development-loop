@@ -45,8 +45,8 @@
 #
 # Octopus projects come from the OCTOPUS_PROJECTS repo variable (a JSON list of
 # project names). When it is unset the three PT projects are used. Pull request
-# releases go only to projects in OCTOPUS_PR_PROJECTS (default: PT - Helm),
-# because each project needs its own Pull Requests channel first.
+# releases go only to projects in OCTOPUS_PR_PROJECTS (default: the three PT
+# container projects), because each project needs its own Pull Requests channel.
 #
 # Future: replace attestation with cosign sign for registry-agnostic signatures.
 
@@ -126,7 +126,11 @@ env:
 jobs:
   build:
     name: Build & push image
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    # Forks and Dependabot get no repo secrets, OIDC to Octopus, or package
+    # write access, so their pull requests only get the CI dry run.
+    if: >-
+      github.event_name != 'pull_request' ||
+      (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]')
     runs-on: ubuntu-latest
     # The later jobs reuse these so every artifact carries the same version.
     outputs:
@@ -507,7 +511,7 @@ jobs:
         # Override with a repo variable, for example:
         #   ["PT - ArgoCD - Raw YAML"]
         # Pull requests use OCTOPUS_PR_PROJECTS: only projects with a Pull Requests channel.
-        project: ${{ fromJSON(github.event_name == 'pull_request' && (vars.OCTOPUS_PR_PROJECTS || '["PT - Helm"]') || (vars.OCTOPUS_PROJECTS || '["PT - Raw YAML","PT - Kustomize","PT - Helm"]')) }}
+        project: ${{ fromJSON(github.event_name == 'pull_request' && (vars.OCTOPUS_PR_PROJECTS || '["PT - Raw YAML","PT - Kustomize","PT - Helm"]') || (vars.OCTOPUS_PROJECTS || '["PT - Raw YAML","PT - Kustomize","PT - Helm"]')) }}
 
     env:
       # Steps with Git resources (the chart or manifests), by project. A pull
