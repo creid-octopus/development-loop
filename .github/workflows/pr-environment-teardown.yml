@@ -1,7 +1,7 @@
 # Pull request environment teardown — deprovisions pr-<number> when a pull
 # request closes, merged or not.
 #
-# Each project in OCTOPUS_PR_PROJECTS (default: PT - Helm) has its own
+# Each project in OCTOPUS_PR_PROJECTS (default: the three PT container projects) has its own
 # ephemeral environment for the pull request. Deprovisioning runs that
 # project's deprovisioning runbook, which drops the pull request's database
 # and logins. The Kubernetes namespace stays until the shared-environment
@@ -36,13 +36,14 @@ env:
 jobs:
   deprovision:
     name: Deprovision pr-${{ github.event.pull_request.number }} in ${{ matrix.project }}
-    # Forks get no OIDC token, and build-image.yml never created an environment for them.
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    # Forks and Dependabot get no OIDC token or secrets, and build-image.yml
+    # never created an environment for them.
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        project: ${{ fromJSON(vars.OCTOPUS_PR_PROJECTS || '["PT - Helm"]') }}
+        project: ${{ fromJSON(vars.OCTOPUS_PR_PROJECTS || '["PT - Raw YAML","PT - Kustomize","PT - Helm"]') }}
 
     steps:
       - name: Log in to Octopus Deploy
