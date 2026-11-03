@@ -7,6 +7,9 @@
 # and logins. The Kubernetes namespace stays until the shared-environment
 # question is settled (see the layer 6 plan).
 #
+# The projects share one pr-<number> environment, so they deprovision one at
+# a time.
+#
 # A project with no pr-<number> environment is skipped. That covers pull
 # requests labeled skip-ephemeral from the start, and environments that
 # already expired.
@@ -42,6 +45,9 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      # One project at a time. The projects share one pr-<number> environment,
+      # and parallel deprovisions conflict on it ("submitted data was out of date").
+      max-parallel: 1
       matrix:
         project: ${{ fromJSON(vars.OCTOPUS_PR_PROJECTS || '["PT - Raw YAML","PT - Kustomize","PT - Helm"]') }}
 
@@ -76,9 +82,23 @@ jobs:
             exit 0
           fi
 
-          echo "Deprovisioning $ENVIRONMENT for $PROJECT"
-          octopus ephemeral-environment deprovision-project \
-            --space "$SPACE" \
-            --project "$PROJECT" \
-            --name "$ENVIRONMENT" \
-            --no-prompt
+          # Retry only the concurrency conflict, in case something else updates
+          # the shared environment at the same moment. Any other error fails.
+          for attempt in 1 2 3 4 5; do
+            echo "Deprovisioning $ENVIRONMENT for $PROJECT (attempt $attempt)"
+            if OUTPUT=$(octopus ephemeral-environment deprovision-project \
+                --space "$SPACE" \
+                --project "$PROJECT" \
+                --name "$ENVIRONMENT" \
+                --no-prompt 2>&1); then
+              echo "$OUTPUT"
+              exit 0
+            fi
+            echo "$OUTPUT"
+            if ! grep -q "submitted data was out of date" <<<"$OUTPUT"; then
+              exit 1
+            fi
+            sleep $((attempt * 5))
+          done
+          echo "Still conflicting after 5 attempts."
+          exit 1
