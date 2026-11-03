@@ -97,4 +97,22 @@ process {
             value = "#{Project.Postgres.OwnerRole}"
         }
     }
+
+    process_template "run-a-process-template" {
+        name = "Run a Process Template"
+        process_template_slug = "kubectl-delete-namespace"
+        version_mask = "1.X"
+
+        parameter "Kubectl.DeleteNamespace.TargetTag" {
+            value = "k8s-agent"
+        }
+
+        parameter "Kubectl.DeleteNamespace.WorkerPool" {
+            value = "WorkerPools-3"
+        }
+
+        parameter "Kubectl.DeleteNamespace.Name" {
+            value = "#{Project.Kubernetes.NamespaceName}"
+        }
+    }
 }
