@@ -2,7 +2,7 @@ name = "Deprovision Postgres database"
 cancel_queued_tasks = true
 cancel_running_tasks = true
 default_guided_failure_mode = "EnvironmentDefault"
-description = "Deletes the database and both roles for this environment. All data in the database is lost. Use it to reset an environment or to remove an ephemeral one. The steps refuse to run in Production. Run Create and Provision Postgres database afterward to rebuild."
+description = "Deletes the database and both roles for this environment, and in pull request environments, this track's namespace. All data in the database is lost. Use it to reset an environment or to remove an ephemeral one. The steps refuse to run in Production. Run Create and Provision Postgres database afterward to rebuild."
 
 connectivity_policy {
     allow_deployments_to_no_targets = true
@@ -95,6 +95,28 @@ process {
 
         parameter "Postgres.Login.Username" {
             value = "#{Project.Postgres.OwnerRole}"
+        }
+    }
+
+    process_template "delete-namespace" {
+        name = "Delete namespace"
+        process_template_slug = "kubectl-delete-namespace"
+        version_mask = "1.X"
+
+        parameter "Kubectl.DeleteNamespace.TargetTag" {
+            value = "k8s-agent"
+        }
+
+        parameter "Kubectl.DeleteNamespace.WorkerPool" {
+            value = "WorkerPools-82"
+        }
+
+        parameter "Kubectl.DeleteNamespace.Name" {
+            value = "#{Project.Kubernetes.NamespaceName}"
+        }
+
+        parameter "Kubectl.DeleteNamespace.RunOnEnvironments" {
+            value = "Environments-44"
         }
     }
 }

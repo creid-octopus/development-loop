@@ -58,8 +58,11 @@ Each environment lives in its own namespace:
 | Development | `developmentloop-demo-development` |
 | Test | `developmentloop-demo-test` |
 | Production | `developmentloop-demo-production` |
+| Pull request `pr-<n>` | `developmentloop-<track>-pr-<n>`, one per track (`raw`, `kustomize`, `helm`) |
 
 Resource names are identical across all approaches and environments (e.g. `developmentloop-demo` for both Deployment and Service). Namespace is the sole disambiguator.
+
+Pull request environments give each track its own namespace. The three projects share one `pr-<n>` environment, and each deprovisions it on its own schedule. The deprovisioning runbook deletes that track's namespace, so it can't remove another track's app. `Project.Kubernetes.NamespaceName` holds both values. The per-track one is scoped to `Ephemeral Testing`.
 
 ## Changing the App
 
