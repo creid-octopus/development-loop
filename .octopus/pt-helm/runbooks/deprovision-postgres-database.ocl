@@ -3,6 +3,7 @@ cancel_queued_tasks = true
 cancel_running_tasks = true
 default_guided_failure_mode = "EnvironmentDefault"
 description = "Deletes the database and both roles for this environment, and in pull request environments, this track's namespace. All data in the database is lost. Use it to reset an environment or to remove an ephemeral one. The steps refuse to run in Production. Run Create and Provision Postgres database afterward to rebuild."
+multi_tenancy_mode = "TenantedOrUntenanted"
 
 connectivity_policy {
     allow_deployments_to_no_targets = true
