@@ -22,8 +22,16 @@ variable "Helper.EnvironmentLowerCase" {
     value "#{Octopus.Environment.Name | ToLower}" {}
 }
 
+variable "Helper.TenantSegment" {
+    value "#{if Tenant.Abbreviation}#{Tenant.Abbreviation}_#{/if}" {}
+}
+
+variable "Helper.TenantSegmentHyphen" {
+    value "#{if Tenant.Abbreviation}#{Tenant.Abbreviation}-#{/if}" {}
+}
+
 variable "Helper.PostgresEnvironmentName" {
-    value "#{Helper.EnvironmentLowerCase}" {}
+    value "#{Helper.TenantSegment}#{Helper.EnvironmentLowerCase}" {}
 
     value "helm_#{Helper.EnvironmentLowerCase | Replace \"-\" \"_\"}" {
         environment = ["ephemeral-testing"]
@@ -43,7 +51,7 @@ variable "Project.Kubernetes.RawManifestDirectory" {
 }
 
 variable "Project.Kubernetes.NamespaceName" {
-    value "developmentloop-helm-#{Helper.EnvironmentLowerCase}" {}
+    value "developmentloop-helm-#{Helper.TenantSegmentHyphen}#{Helper.EnvironmentLowerCase}" {}
 }
 
 variable "Project.Postgres.AppHost" {
@@ -67,11 +75,11 @@ variable "Project.Environment.Url" {
 }
 
 variable "Project.Ingress.Host" {
-    value "helm-#{Helper.EnvironmentLowerCase}.developmentloop.#{Project.Ingress.Domain}" {}
+    value "helm-#{Helper.TenantSegmentHyphen}#{Helper.EnvironmentLowerCase}.developmentloop.#{Project.Ingress.Domain}" {}
 }
 
 variable "Project.Helm.ReleaseName" {
-    value "helm-developmentloop-#{Helper.EnvironmentLowerCase}" {}
+    value "helm-developmentloop-#{Helper.TenantSegmentHyphen}#{Helper.EnvironmentLowerCase}" {}
 }
 
 variable "Project.Helm.ChartDirectory" {
@@ -87,11 +95,15 @@ variable "Project.Helm.ValuesFilePath" {
 }
 
 variable "Project.Helm.UpgradeArgs" {
-    value "" {}
+    value "--set namespace=#{Project.Kubernetes.NamespaceName} --set appEnv=#{Octopus.Environment.Name} --set database.name=#{Project.Postgres.DatabaseName} --set database.user=#{Project.Postgres.AppRole} --set ingress.host=#{Project.Ingress.Host} --set-string \"brand.name=#{Project.Branding.Name}\" --set-string \"brand.color=#{Project.Branding.Color}\"" {}
+}
 
-    value "--set namespace=#{Project.Kubernetes.NamespaceName} --set appEnv=#{Octopus.Environment.Name} --set database.name=#{Project.Postgres.DatabaseName} --set database.user=#{Project.Postgres.AppRole} --set ingress.host=#{Project.Ingress.Host}" {
-        environment = ["ephemeral-testing"]
-    }
+variable "Project.Branding.Name" {
+    value "#{if Tenant.Branding.BrandName}#{Tenant.Branding.BrandName}#{/if}" {}
+}
+
+variable "Project.Branding.Color" {
+    value "#{if Tenant.Branding.BrandColor}#{Tenant.Branding.BrandColor}#{/if}" {}
 }
 
 variable "Project.Deprovision.Confirm" {

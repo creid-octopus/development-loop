@@ -10,6 +10,12 @@ configMapName: helm-developmentloop-demo-config
 
 appEnv: Development
 
+# Tenant branding. Octopus sets these on tenanted deploys. Empty means the app's
+# defaults: the "developmentloop demo" title and the environment's banner colour.
+brand:
+  name: ""
+  color: ""
+
 containerPort: 3000
 servicePort: 80
 probePath: /health

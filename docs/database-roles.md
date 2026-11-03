@@ -64,14 +64,19 @@ The database and login names come from a chain of variables:
 
 1. `Helper.EnvironmentLowerCase` is the environment name in lower case, such as `development` or `pr-12`.
 2. `Helper.PostgresEnvironmentName` is the part of the name that changes per environment.
-   - Development, Test, and Production: the same as `Helper.EnvironmentLowerCase`.
+   - Development, Test, and Production: `Helper.TenantSegment` followed by `Helper.EnvironmentLowerCase`. The segment is the tenant's `Tenant.Abbreviation` and an underscore, such as `radiant_`. It's empty on untenanted deploys. Only PT - Helm deploys to tenants so far.
    - Pull request environments (scoped to the `Ephemeral Testing` parent): the track, then the environment name with `-` replaced by `_`, such as `helm_pr_12`.
 3. `Project.Postgres.DatabaseName`, `OwnerRole`, and `AppRole` add the `developmentloop_`, `developmentloop_owner_`, and `developmentloop_app_` prefixes.
 
 | Environment | Database | Owner login | App login |
 | --- | --- | --- | --- |
 | Development | `developmentloop_development` | `developmentloop_owner_development` | `developmentloop_app_development` |
+| Production, tenant `radiant` (PT - Helm) | `developmentloop_radiant_production` | `developmentloop_owner_radiant_production` | `developmentloop_app_radiant_production` |
 | `pr-12`, Helm track | `developmentloop_helm_pr_12` | `developmentloop_owner_helm_pr_12` | `developmentloop_app_helm_pr_12` |
+
+Names read app, then qualifiers, then environment. In pull request environments the qualifier is the track. In tenanted deploys it's the tenant. `Tenant.Abbreviation` lives in the `Common Tenant Variables` library set: lowercase `a-z0-9`, at most 10 characters, no `-` or `_`. The longest login, `developmentloop_owner_<10 characters>_production`, is 43 characters, inside the Postgres limit of 63. The Kubernetes namespace and the hostname use the same segment with `-`: `developmentloop-helm-radiant-production` and `helm-radiant-production.developmentloop.localtest.me`.
+
+Tenants supply their own owner and app passwords for each environment, through project templates named `Project.Postgres.OwnerPassword` and `Project.Postgres.AppPassword` on PT - Helm. Untenanted deploys keep the values in `CommonPostgresVariables`.
 
 Pull request environments use the owner and app passwords scoped to `Ephemeral Testing` in `CommonPostgresVariables`, so every pull request shares the same pair.
 

@@ -6,6 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { trace, SpanStatusCode } = require("@opentelemetry/api");
 const db = require("./db");
+const { branding } = require("./branding");
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -142,14 +143,16 @@ app.get("/simulate/oom", (req, res) => {
 });
 
 app.get("/", (req, res) => {
-  const colour = bannerColour(buildInfo.environment);
+  const envColour = bannerColour(buildInfo.environment);
+  const brand = branding(process.env, envColour);
+  const colour = brand.colour;
   res.setHeader("Content-Type", "text/html");
   res.send(`<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>developmentloop · ${buildInfo.environment}</title>
+  <title>${brand.name} · ${buildInfo.environment}</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: system-ui, sans-serif; background: #f9fafb; color: #111827; }
@@ -192,7 +195,7 @@ app.get("/", (req, res) => {
     .version-big {
       font-size: 2.5rem;
       font-weight: 800;
-      color: ${colour};
+      color: ${envColour};
       letter-spacing: -1px;
     }
     .version-sub { color: #6b7280; font-size: 0.85rem; margin-top: 0.25rem; }
@@ -200,7 +203,7 @@ app.get("/", (req, res) => {
 </head>
 <body>
   <div class="banner">
-    <h1>developmentloop demo</h1>
+    <h1>${brand.name}</h1>
     <span class="env-badge">${buildInfo.environment}</span>
   </div>
 

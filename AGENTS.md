@@ -40,7 +40,7 @@ Local details: [`docs/local-development.md`](docs/local-development.md).
 - Every schema change is a Flyway migration in `db/migrations/`. Never edit a migration that has shipped. An applied `R__` file can't be deleted without a `flyway repair`. How migrations behave on deploy, redeploy, and rollback: [`docs/database-migrations.md`](docs/database-migrations.md).
 - Write migrations as expand and contract. The previous app version must still work against the new schema.
 - Never put a destructive change (`DROP`, column rename, `NOT NULL` without a default) in the same release as the code that stops using it.
-- Each tenant gets its own database. The tenant key names the database and the user.
+- Each tenant gets its own database per environment. `Tenant.Abbreviation` names the database, the logins, the namespace, and the host, as in `developmentloop_radiant_production`. Names read app, then qualifiers, then environment. See [`docs/database-roles.md`](docs/database-roles.md#how-the-names-are-built).
 - Migrations run on an Octopus worker before the app deploys. The app never migrates on startup.
 - Three logins touch a database: server admin, database owner, and app user. The admin only runs the provisioning runbook. The owner runs Flyway. The app user reads and writes rows and owns nothing. Details: [`docs/database-roles.md`](docs/database-roles.md).
 - Roles, databases, and grants come from the `Create and provision Postgres database` runbook, not the deployment. The deployment only verifies them.
