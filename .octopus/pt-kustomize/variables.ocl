@@ -44,6 +44,10 @@ variable "Project.Kubernetes.RawManifestDirectory" {
 
 variable "Project.Kubernetes.NamespaceName" {
     value "developmentloop-demo-#{Helper.EnvironmentLowerCase}" {}
+
+    value "developmentloop-kustomize-#{Helper.EnvironmentLowerCase}" {
+        environment = ["ephemeral-testing"]
+    }
 }
 
 variable "Project.Postgres.AppHost" {
