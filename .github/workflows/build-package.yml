@@ -92,7 +92,7 @@ jobs:
       # ── Step 2: Install production dependencies ──────────────────────────────
       # Same Node.js version the app servers run. --omit=dev keeps test tools out.
       # --no-bin-links skips the .bin symlinks, which a zip cannot carry.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
 
