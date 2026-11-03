@@ -3,6 +3,7 @@ cancel_queued_tasks = true
 cancel_running_tasks = true
 default_guided_failure_mode = "EnvironmentDefault"
 description = "Creates the Postgres roles and database. Also grants permissions to the app role for database actions. Safe to rerun: existing resources are kept, passwords are reset to the project values, and grants are reapplied. Run it once in each environment before the first deployment."
+multi_tenancy_mode = "TenantedOrUntenanted"
 
 connectivity_policy {
     allow_deployments_to_no_targets = true
