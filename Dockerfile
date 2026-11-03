@@ -1,5 +1,5 @@
 # ── Build stage (shared by both targets) ─────────────────────
-FROM node:24.22.1-slim AS build
+FROM node:24.22.2-slim AS build
 WORKDIR /app
 COPY src/package*.json ./
 RUN npm ci --omit=dev
@@ -7,7 +7,7 @@ COPY src/ .
 
 # ── Debug target (feature / RC builds) ───────────────────────
 # Full node:24.22.1-slim — has shell, curl, npm for exec/debugging
-FROM node:24.22.1-slim AS debug
+FROM node:24.22.2-slim AS debug
 WORKDIR /app
 COPY --from=build /app .
 
@@ -32,7 +32,7 @@ CMD ["node", "server.js"]
 # ── Release target (main / stable builds) ────────────────────
 # Source of the Node.js binary for the release image.
 # Pinned so a runtime fix is one tag bump. Dependabot updates this tag.
-FROM node:24.22.1-slim AS node-bin
+FROM node:24.22.2-slim AS node-bin
 
 # Distroless — no shell, no package manager, minimal attack surface.
 # The cc base has the C++ runtime that Node needs. The nodejs distroless image
