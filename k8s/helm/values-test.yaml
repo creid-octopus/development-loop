@@ -1,7 +1,7 @@
 # Helm values for test.
 # Overrides default values only for environment-specific settings.
 
-namespace: developmentloop-demo-test
+namespace: developmentloop-helm-test
 
 appEnv: Test
 

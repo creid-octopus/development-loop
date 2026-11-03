@@ -3,7 +3,7 @@
 # Local use only. A real cluster gets this Secret from cluster bootstrap.
 #
 # Usage:
-#   DB_PASSWORD='...' scripts/k8s-local-secret.sh [development|test|production]
+#   DB_PASSWORD='...' scripts/k8s-local-secret.sh [development|test|production] [raw|kustomize|helm]
 #
 # Defaults match the Octopus "Postgres - Local DB" project:
 #   database  test_db_<env>
@@ -12,12 +12,13 @@
 set -euo pipefail
 
 ENVIRONMENT="${1:-development}"
+TRACK="${2:-raw}"
 : "${DB_PASSWORD:?Set DB_PASSWORD to the value of Project.Postgres.AppPassword}"
 DB_HOST="${DB_HOST:-host.docker.internal}"
 DB_PORT="${DB_PORT:-5432}"
 DB_NAME="${DB_NAME:-test_db_${ENVIRONMENT}}"
 DB_USER="${DB_USER:-test_db_login_${ENVIRONMENT}}"
-NAMESPACE="developmentloop-demo-${ENVIRONMENT}"
+NAMESPACE="developmentloop-${TRACK}-${ENVIRONMENT}"
 
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 kubectl -n "$NAMESPACE" create secret generic developmentloop-db \

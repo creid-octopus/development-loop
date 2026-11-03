@@ -8,7 +8,7 @@ resources:
 
 namePrefix: kustomize-
 
-namespace: developmentloop-demo-test
+namespace: developmentloop-kustomize-test
 
 patches:
   - target:

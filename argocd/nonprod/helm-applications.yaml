@@ -11,10 +11,10 @@ spec:
         elements:
           - name: helm-developmentloop-demo-development
             environment: development
-            namespace: developmentloop-demo-development
+            namespace: developmentloop-helm-development
           - name: helm-developmentloop-demo-test
             environment: test
-            namespace: developmentloop-demo-test
+            namespace: developmentloop-helm-test
   template:
     metadata:
       name: '{{ name }}'

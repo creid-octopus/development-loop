@@ -4,7 +4,7 @@ metadata:
   name: raw-developmentloop-demo
   labels:
     app: raw-developmentloop-demo
-  namespace: developmentloop-demo-development
+  namespace: developmentloop-raw-development
 spec:
   type: ClusterIP
   selector:

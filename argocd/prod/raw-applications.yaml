@@ -11,7 +11,7 @@ spec:
         elements:
           - name: raw-developmentloop-demo-production
             environment: production
-            namespace: developmentloop-demo-production
+            namespace: developmentloop-raw-production
             path: k8s/raw/production
   template:
     metadata:

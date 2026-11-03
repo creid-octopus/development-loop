@@ -1,7 +1,7 @@
 # Helm values for development.
 # Overrides default values only for environment-specific settings.
 
-namespace: developmentloop-demo-development
+namespace: developmentloop-helm-development
 
 appEnv: Development
 

@@ -4,7 +4,7 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: raw-developmentloop-demo
-  namespace: developmentloop-demo-development
+  namespace: developmentloop-raw-development
   labels:
     app: raw-developmentloop-demo
 spec:
