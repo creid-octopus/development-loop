@@ -114,5 +114,9 @@ process {
         parameter "Kubectl.DeleteNamespace.Name" {
             value = "#{Project.Kubernetes.NamespaceName}"
         }
+
+        parameter "Kubectl.DeleteNamespace.RunOnEnvironments" {
+            value = "Environments-44"
+        }
     }
 }
