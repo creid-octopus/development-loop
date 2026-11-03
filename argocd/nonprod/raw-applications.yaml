@@ -11,11 +11,11 @@ spec:
         elements:
           - name: raw-developmentloop-demo-development
             environment: development
-            namespace: developmentloop-demo-development
+            namespace: developmentloop-raw-development
             path: k8s/raw/development
           - name: raw-developmentloop-demo-test
             environment: test
-            namespace: developmentloop-demo-test
+            namespace: developmentloop-raw-test
             path: k8s/raw/test
   template:
     metadata:

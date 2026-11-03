@@ -8,7 +8,7 @@ resources:
 
 namePrefix: kustomize-
 
-namespace: developmentloop-demo-development
+namespace: developmentloop-kustomize-development
 
 patches:
   # Patch ConfigMap APP_ENV

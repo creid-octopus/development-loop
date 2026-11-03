@@ -5,7 +5,7 @@ metadata:
   labels:
     app: raw-developmentloop-demo
     app.kubernetes.io/environment: "Test"
-  namespace: developmentloop-demo-test
+  namespace: developmentloop-raw-test
 spec:
   replicas: 1
   selector:

@@ -1,7 +1,7 @@
 # Helm values for production.
 # Overrides default values only for environment-specific settings.
 
-namespace: developmentloop-demo-production
+namespace: developmentloop-helm-production
 
 appEnv: Production
 

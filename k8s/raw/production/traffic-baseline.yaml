@@ -10,7 +10,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: traffic-baseline
-  namespace: developmentloop-demo-production
+  namespace: developmentloop-raw-production
   labels:
     app: traffic-baseline
 spec:

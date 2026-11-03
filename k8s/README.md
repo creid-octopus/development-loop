@@ -1,6 +1,6 @@
 # Kubernetes Manifests
 
-Three approaches for deploying `developmentloop-demo` to Kubernetes. Each is independently renderable and deployable — different teams and tools prefer different paradigms.
+Three approaches for deploying the developmentloop app to Kubernetes. Each is independently renderable and deployable — different teams and tools prefer different paradigms.
 
 ## Quick Start
 
@@ -51,18 +51,20 @@ k8s/
 
 ## Namespace Convention
 
-Each environment lives in its own namespace:
+Each track gets its own namespace in each environment: `developmentloop-<track>-<env>`, where the track is `raw`, `kustomize`, or `helm`.
 
 | Environment | Namespace |
 |---|---|
-| Development | `developmentloop-demo-development` |
-| Test | `developmentloop-demo-test` |
-| Production | `developmentloop-demo-production` |
-| Pull request `pr-<n>` | `developmentloop-<track>-pr-<n>`, one per track (`raw`, `kustomize`, `helm`) |
+| Development | `developmentloop-<track>-development` |
+| Test | `developmentloop-<track>-test` |
+| Production | `developmentloop-<track>-production` |
+| Pull request `pr-<n>` | `developmentloop-<track>-pr-<n>` |
 
-Resource names are identical across all approaches and environments (e.g. `developmentloop-demo` for both Deployment and Service). Namespace is the sole disambiguator.
+Names follow one rule: the app, then the qualifiers, then the environment. The track is the first qualifier. A tenant, when there is one, comes after it, as in `developmentloop-helm-radiant-production`. Hostnames use the same parts in DNS order, for example `helm-production.developmentloop.localtest.me`.
 
-Pull request environments give each track its own namespace. The three projects share one `pr-<n>` environment, and each deprovisions it on its own schedule. The deprovisioning runbook deletes that track's namespace, so it can't remove another track's app. `Project.Kubernetes.NamespaceName` holds both values. The per-track one is scoped to `Ephemeral Testing`.
+`Project.Kubernetes.NamespaceName` builds the name in each Octopus project, and the deployment's steps all use it. The raw YAML folders for Development, Test, and Production name their namespace directly, because Argo CD reads them too. The exception is `secrets/database_connection.yaml`. All three tracks apply that file, so it takes `#{Project.Kubernetes.NamespaceName}`. Argo CD doesn't read the `secrets/` folder.
+
+A per-track namespace means deleting one track's namespace can't remove another track's app. The pull request deprovisioning runbook relies on this.
 
 ## Changing the App
 

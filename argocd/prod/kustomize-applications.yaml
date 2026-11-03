@@ -11,7 +11,7 @@ spec:
         elements:
           - name: kustomize-developmentloop-demo-production
             environment: production
-            namespace: developmentloop-demo-production
+            namespace: developmentloop-kustomize-production
             path: k8s/kustomize/production
   template:
     metadata:

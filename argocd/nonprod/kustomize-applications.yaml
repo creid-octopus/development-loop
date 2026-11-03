@@ -11,11 +11,11 @@ spec:
         elements:
           - name: kustomize-developmentloop-demo-development
             environment: development
-            namespace: developmentloop-demo-development
+            namespace: developmentloop-kustomize-development
             path: k8s/kustomize/development
           - name: kustomize-developmentloop-demo-test
             environment: test
-            namespace: developmentloop-demo-test
+            namespace: developmentloop-kustomize-test
             path: k8s/kustomize/test
   template:
     metadata:
