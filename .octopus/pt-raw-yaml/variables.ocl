@@ -70,6 +70,10 @@ variable "Project.Environment.Url" {
     value "http://#{Project.Ingress.Host}#{if Project.Ingress.Port}:#{Project.Ingress.Port}#{/if}" {}
 }
 
+variable "Project.HealthCheck.BaseUrl" {
+    value "http://ingress-nginx-controller.ingress-nginx.svc.cluster.local:8080" {}
+}
+
 variable "Project.Ingress.Host" {
     value "raw-#{Helper.EnvironmentLowerCase}.developmentloop.#{Project.Ingress.Domain}" {}
 }
