@@ -149,6 +149,6 @@ A Helm upgrade of the controller resets this patch. Set the strategy in the char
 ### Checking every deployment
 
 ```bash
-scripts/check-k8s-health.sh      # container tracks. Needs the port-forward.
+scripts/check-k8s-health.sh      # container tracks and Helm tenants. Needs the port-forward.
 scripts/check-server-health.sh   # Linux server path on ports 3101 to 3103
 ```
