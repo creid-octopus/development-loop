@@ -124,6 +124,8 @@ kubectl port-forward svc/ingress-nginx-controller 8080:8080 -n ingress-nginx
 
 Then open `http://raw-development.developmentloop.localtest.me:8080`.
 
+The deployment's `Health check` step doesn't need the port-forward. It runs in a script pod on the Kubernetes agent and calls the ingress controller's Service, `http://ingress-nginx-controller.ingress-nginx.svc.cluster.local:8080` (`Project.HealthCheck.BaseUrl`), with a `Host` header set to `Project.Ingress.Host`. That tests the Ingress rule and the app together. It fails the deployment when `/health/db` isn't `ok` or reports the wrong database or app login. On a real cluster, set `Project.HealthCheck.BaseUrl` to the app's URL and clear the host header.
+
 On a real cluster the same manifests apply. Change the ingress class and host for that cluster:
 
 - **Raw YAML:** the `Project.Ingress.Domain`, `Project.Ingress.ClassName`, and `Project.Ingress.Port` variables. Clear the port when the controller uses 80 or 443.

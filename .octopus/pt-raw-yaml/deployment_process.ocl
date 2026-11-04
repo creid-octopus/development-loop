@@ -206,6 +206,32 @@ process_template "deploy-developmentloop" {
     }
 }
 
+process_template "health-check" {
+    name = "Health check"
+    process_template_slug = "kubernetes-health-check"
+    version_mask = "1.X"
+
+    parameter "HealthCheck.TargetTag" {
+        value = "k8s-agent"
+    }
+
+    parameter "HealthCheck.BaseUrl" {
+        value = "#{Project.HealthCheck.BaseUrl}"
+    }
+
+    parameter "HealthCheck.HostHeader" {
+        value = "#{Project.Ingress.Host}"
+    }
+
+    parameter "HealthCheck.ExpectedDatabase" {
+        value = "#{Project.Postgres.DatabaseName}"
+    }
+
+    parameter "HealthCheck.ExpectedUser" {
+        value = "#{Project.Postgres.AppRole}"
+    }
+}
+
 process_template "postdeploy-notification" {
     name = "Postdeploy Notification"
     process_template_slug = "notifications-postdeploy"
