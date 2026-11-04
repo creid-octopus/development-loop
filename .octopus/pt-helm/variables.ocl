@@ -99,11 +99,11 @@ variable "Project.Helm.UpgradeArgs" {
 }
 
 variable "Project.Branding.Name" {
-    value "#{if Tenant.Branding.BrandName}#{Tenant.Branding.BrandName}#{/if}" {}
+    value "#{if Octopus.Deployment.Tenant.Id}#{Tenant.Branding.BrandName | Trim}#{/if}" {}
 }
 
 variable "Project.Branding.Color" {
-    value "#{if Tenant.Branding.BrandColor}#{Tenant.Branding.BrandColor}#{/if}" {}
+    value "#{if Octopus.Deployment.Tenant.Id}#{Tenant.Branding.BrandColor | Trim}#{/if}" {}
 }
 
 variable "Project.Deprovision.Confirm" {
