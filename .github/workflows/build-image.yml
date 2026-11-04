@@ -32,7 +32,8 @@
 #   octopus-packages → packages db/migrations as a Flyway zip, pushes it, and pushes
 #                      build information for the image, SBOM, and Flyway packages
 #   release          → one job per Octopus project (matrix): creates a release at the
-#                      same version as the image, then deploys main builds to Development
+#                      same version as the image, then deploys main builds to Development,
+#                      untenanted and to the project's tenants (see OCTOPUS_TENANT_DEPLOYS)
 # One workflow run means one version. The image tag, the packages, and the release
 # number are all 1.0.<run>, so a release always points at the image it came from.
 # Traceability: build information carries the commit, and the release custom fields
@@ -47,6 +48,11 @@
 # project names). When it is unset the three PT projects are used. Pull request
 # releases go only to projects in OCTOPUS_PR_PROJECTS (default: the three PT
 # container projects), because each project needs its own Pull Requests channel.
+#
+# Tenants: OCTOPUS_TENANT_DEPLOYS maps a project to the tenant tag whose tenants get
+# each main build in Development, for example {"PT - Helm":"Development Loop/Auto Deploy"}.
+# A project not in the map, or an unset variable, deploys untenanted only. Provision a
+# tenant's database before tagging it: a tenant deploy fails without one.
 #
 # Future: replace attestation with cosign sign for registry-agnostic signatures.
 
@@ -514,6 +520,8 @@ jobs:
         project: ${{ fromJSON(github.event_name == 'pull_request' && (vars.OCTOPUS_PR_PROJECTS || '["PT - Raw YAML","PT - Kustomize","PT - Helm"]') || (vars.OCTOPUS_PROJECTS || '["PT - Raw YAML","PT - Kustomize","PT - Helm"]')) }}
 
     env:
+      # Tenant tag for this project's tenanted Development deploy. Empty: no tenant deploy.
+      TENANT_DEPLOY_TAG: ${{ fromJSON(vars.OCTOPUS_TENANT_DEPLOYS || '{}')[matrix.project] || '' }}
       # Steps with Git resources (the chart or manifests), by project. A pull
       # request release points them at the pull request's branch, so chart and
       # manifest changes reach its environment. Names are the expanded step
@@ -597,3 +605,15 @@ jobs:
           project: ${{ matrix.project }}
           release_number: ${{ needs.build.outputs.version }}
           environments: Development
+
+      # Tenants get the same release in Development. A project that becomes tenanted
+      # only should drop the untenanted deploy above.
+      - name: Deploy to Development tenants
+        if: needs.build.outputs.is_release == 'true' && env.TENANT_DEPLOY_TAG != ''
+        uses: OctopusDeploy/deploy-release-tenanted-action@v4
+        with:
+          space: ${{ secrets.OCTOPUS_SPACE }}
+          project: ${{ matrix.project }}
+          release_number: ${{ needs.build.outputs.version }}
+          environment: Development
+          tenant_tags: ${{ env.TENANT_DEPLOY_TAG }}
