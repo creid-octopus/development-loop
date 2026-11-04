@@ -22,7 +22,7 @@ docker compose up --build                # database, migrations, app, telemetry
 scripts/test-local.sh                    # end to end check of the local loop
 scripts/migrate.sh info                  # Flyway against DATABASE_URL, read only
 scripts/scan-migrations.sh               # scan migrations for risky SQL
-scripts/check-k8s-health.sh              # /health/db on every container track and environment (needs the port-forward)
+scripts/check-k8s-health.sh              # /health/db on every container track, tenant, and environment (needs the port-forward)
 scripts/check-server-health.sh           # /health/db on the Linux server path, ports 3101 to 3103
 ```
 
