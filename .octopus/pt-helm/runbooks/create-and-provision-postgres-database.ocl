@@ -155,4 +155,14 @@ process {
             value = "#{Project.Postgres.AppPassword}"
         }
     }
+
+    process_template "postdeploy-notification" {
+        name = "Postdeploy Notification"
+        process_template_slug = "notifications-postdeploy"
+        version_mask = "5.X"
+
+        parameter "Parameters.CustomMessage" {
+            value = "Database: #{Project.Postgres.DatabaseName}"
+        }
+    }
 }

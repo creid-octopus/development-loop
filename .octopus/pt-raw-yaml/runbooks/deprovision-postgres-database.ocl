@@ -119,4 +119,14 @@ process {
             value = "Environments-44"
         }
     }
+
+    process_template "postdeploy-notification" {
+        name = "Postdeploy Notification"
+        process_template_slug = "notifications-postdeploy"
+        version_mask = "5.X"
+
+        parameter "Parameters.CustomMessage" {
+            value = "Removed database #{Project.Postgres.DatabaseName}"
+        }
+    }
 }
