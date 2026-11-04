@@ -6,6 +6,9 @@ metadata:
 data:
   # property-like keys; each key maps to a simple value
   APP_ENV: {{ .Values.appEnv | quote }}
+  # Tenant branding. Octopus sets these from tenant variables. Empty means the app's defaults.
+  BRAND_NAME: {{ .Values.brand.name | quote }}
+  BRAND_COLOR: {{ .Values.brand.color | quote }}
   # Database connection. The password comes from a Secret, not from here.
   PGHOST: {{ .Values.database.host | quote }}
   PGPORT: {{ .Values.database.port | quote }}

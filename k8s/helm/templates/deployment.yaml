@@ -20,10 +20,10 @@ spec:
       labels:
         app: {{ .Values.appName }}
         {{- include "app.envLabels" . | nindent 8 }}
-      {{- with (include "app.datadogAnnotations" .) }}
       annotations:
-        {{- . | nindent 8 }}
-      {{- end }}
+        # Restarts the pods when the ConfigMap changes, for example new tenant branding.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with (include "app.datadogAnnotations" .) }}{{ . | nindent 8 }}{{- end }}
     spec:
       containers:
         - name: {{ .Values.appName }}
@@ -39,6 +39,17 @@ spec:
                 configMapKeyRef:
                   name: {{ .Values.configMapName }}
                   key: APP_ENV
+            # Tenant branding. Empty means the app's defaults.
+            - name: BRAND_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ .Values.configMapName }}
+                  key: BRAND_NAME
+            - name: BRAND_COLOR
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ .Values.configMapName }}
+                  key: BRAND_COLOR
             # Database connection. The password comes from the Secret that Octopus creates.
             - name: PGHOST
               valueFrom:
