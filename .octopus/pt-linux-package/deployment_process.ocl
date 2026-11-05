@@ -175,6 +175,28 @@ process_template "deploy-app-package" {
     }
 }
 
+process_template "health-check" {
+    name = "Health check"
+    process_template_slug = "linux-health-check"
+    version_mask = "1.X"
+
+    parameter "HealthCheck.TargetTag" {
+        value = "app-server"
+    }
+
+    parameter "HealthCheck.BaseUrl" {
+        value = "http://localhost:#{Project.Server.Port}"
+    }
+
+    parameter "HealthCheck.ExpectedDatabase" {
+        value = "#{Project.Postgres.DatabaseName}"
+    }
+
+    parameter "HealthCheck.ExpectedUser" {
+        value = "#{Project.Postgres.AppRole}"
+    }
+}
+
 process_template "postdeploy-notification" {
     name = "Postdeploy Notification"
     process_template_slug = "notifications-postdeploy"

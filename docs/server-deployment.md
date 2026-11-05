@@ -36,7 +36,8 @@ Both paths share the database steps. The same roles, migrations, and lock step r
 5. Checks the Node.js runtime on the target.
 6. Extracts the package and replaces the env file values.
 7. Runs `PostDeploy.sh`. The script restarts the app and waits for `/health`.
-8. Notifies Slack with the app URL.
+8. Checks `/health/db` on each server with the `linux-health-check` template. It calls `http://localhost:<Project.Server.Port>` on the target itself, so it needs no published port. It fails the deployment when the app isn't `ok`, or reports a database or app login other than the environment's. Step 7 only waits for the app to start. Step 8 checks it's connected to the right database.
+9. Notifies Slack with the app URL.
 
 Steps 5 to 7 live in the process template `linux-deploy-package`. Step 7 lives in the package. The app owns how it restarts. The template stays generic.
 
