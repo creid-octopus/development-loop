@@ -6,13 +6,14 @@ Point-in-time record of the non-obvious design decisions in the GitHub Actions w
 
 ## Workflow split rationale
 
-The pipeline is intentionally split across four workflows rather than one monolithic file:
+The pipeline is intentionally split across several workflows rather than one monolithic file:
 
 | Workflow | Responsibility | Side effects |
 |---|---|---|
 | `ci.yml` | Filesystem scan + image dry build + image scan (best-effort) | None outside the repo |
 | `publish.yml` | Push zip package + create Octopus release | Octopus feed, release, deployment |
-| `build-image.yml` | Build + push container image | GHCR, GitHub attestation store |
+| `build-image.yml` | Build + push container image and Octopus packages. Pull request releases | GHCR, GitHub attestation store, Octopus feed, pull request releases |
+| `release-train.yml` | Batch `main` into Development releases, hourly | Octopus release, Development deployments |
 | `testbed-package.yml` | Ad-hoc Octopus scenario testing | Octopus feed, release |
 
 This split means `ci.yml` can run on every push to every branch with zero risk of creating side effects, while the workflows that do have side effects (pushing to Octopus, publishing to GHCR) have explicit trigger controls.
@@ -146,6 +147,12 @@ Each image push produces:
 
 `latest` is intentionally omitted. Mutable tags in k8s manifests create ambiguity about what is actually deployed. The SHA tag provides an immutable reference that doesn't change if the version tag is overwritten.
 
+### Pull request environments only for deployable changes
+
+A pull request gets a release, and so a `pr-<number>` environment, only when it changes something that deploys: `src/`, `db/migrations/`, `Dockerfile`, `.dockerignore`, `k8s/`, or `.octopus/`. The `Check for deployable changes` step diffs the pull request's base and head, so it covers every commit in the pull request.
+
+`build-image.yml` stays in the `pull_request` paths, so a change to only the workflow still builds and tests it. It just creates no environment. Before this, #24 (workflow and docs only) started a `pr-24` environment with nothing new to deploy.
+
 ---
 
 ## `release-train.yml`
@@ -175,7 +182,50 @@ The server path (`build-package.yml`) pushes `developmentloop-flyway` too, at `1
 
 ### `AIAssisted` covers the batch
 
-`AIAssisted` is `true` when any commit since the last release has an AI co-author trailer. A batch with one AI commit pauses for review in Test and Production, so most batches will.
+`AIAssisted` is `true` when any commit since the last release has an AI co-author trailer. A batch with one AI commit pauses for review in Test and Production, so most batches will. See [`AIAssisted` release field](#aiassisted-release-field).
+
+### Confirmed on `1.2.1`
+
+The first train run (November 5, forced) made `1.2.1` on all three projects from 3 commits since `1.0.41`, with `AIAssisted = true` and packages pinned to `1.0.41`. All six Development deploys (three tracks and three tenants) ran with `DeploymentMode = Deploy`, so the jump from `1.0.x` to `1.2.x` didn't read as a rollback. Promotion to Test paused at `Confirm AI-assisted release`. A redeploy to Test didn't.
+
+---
+
+## `AIAssisted` release field
+
+### How it's calculated
+
+`AIAssisted` is `true` when a commit in the range has a `Co-authored-by` trailer naming an AI tool (`claude`, `anthropic`, `copilot`, `codex`, or `cursor`, case-insensitive), or the pull request has the `ai-assisted` label. Otherwise it's `false`. The range depends on what creates the release:
+
+| Release | Created by | Range checked | Label |
+|---|---|---|---|
+| Pull request (`1.0.<run>-pr-<n>`) | `build-image.yml` | The pull request's `base..head` | `ai-assisted` counts |
+| `main` (`1.2.<train run>`) | `release-train.yml` | The last stable release's `GIT_COMMIT_SHA` to `main`. If that commit is missing or unknown, the last merge (`HEAD^1..HEAD`) | Not read |
+
+A merged pull request's commits are reachable from `main`, so a `main` batch sees their trailers. A merge commit made by GitHub has none of its own.
+
+### Why manual builds used to be `false`
+
+Before the release train, `build-image.yml` created `main` releases, and only had a range for `pull_request` and `push` events. A `workflow_dispatch` build had no range, so `AIAssisted` defaulted to `false`. `1.0.41` came out that way even though its commits had AI trailers, so it didn't pause in Test. The train reads the range from the last release instead, so a manual run gets the same answer as a scheduled one.
+
+### Where it's used
+
+`Confirm AI-assisted release` in `predeploy-boilerplate` (2.0 and later) reads the field. It pauses when all of these are true:
+
+- `Octopus.Release.CustomFields[AIAssisted]` is `true`.
+- `DeploymentMode` from `Calculate Deployment Mode` is `Deploy`. A redeploy or rollback of a release already reviewed in that environment doesn't pause again.
+- The environment is in `Predeploy.AIReview.RunEnvs`: Test and Production. Development and pull request environments don't pause, so CI deploys run unattended.
+
+Approvers are everyone, like `Confirm rollback`.
+
+### Why a step, not a policy
+
+A policy can't read release custom fields. So the step reads the field, and the `Require Predeploy Gates` policy requires the step: present, enabled, and not skipped. The policy can't require the step to be unconditional, because its run condition is the point.
+
+### Trade-offs
+
+- A trailer is a claim, not proof. A commit without one is treated as human-written, and any commit can add one.
+- In a batch, one AI commit marks the whole release. That's the safe side, but most batches will pause.
+- Octopus allows at most 10 release custom fields, each 150 characters or less. `AIAssisted` uses one.
 
 ---
 
