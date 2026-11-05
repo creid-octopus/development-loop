@@ -149,7 +149,7 @@ Each image push produces:
 
 ### Pull request environments only for deployable changes
 
-A pull request gets a release, and so a `pr-<number>` environment, only when it changes something that deploys: `src/`, `db/migrations/`, `Dockerfile`, `.dockerignore`, `k8s/`, or `.octopus/`. The `Check for deployable changes` step diffs the pull request's base and head, so it covers every commit in the pull request.
+A pull request gets a release, and so a `pr-<number>` environment, only when it changes something that deploys: `src/`, `db/migrations/`, `Dockerfile`, `.dockerignore`, `k8s/`, or a container project's `.octopus/` folder (`pt-raw-yaml`, `pt-kustomize`, `pt-helm`). A change to only `.octopus/pt-linux-package/` doesn't count, because that project has no pull request environments. The `Check for deployable changes` step diffs the pull request's base and head, so it covers every commit in the pull request.
 
 `build-image.yml` stays in the `pull_request` paths, so a change to only the workflow still builds and tests it. It just creates no environment. Before this, #24 (workflow and docs only) started a `pr-24` environment with nothing new to deploy.
 
