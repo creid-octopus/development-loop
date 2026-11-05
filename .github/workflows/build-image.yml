@@ -66,6 +66,8 @@ on:
 
   # The main paths, plus the chart, manifests, process, and this workflow: a
   # pull request environment deploys those from the pull request's branch.
+  # A change to only this workflow builds but gets no environment (see the
+  # deployable step).
   # Forks are skipped in the build job: they get no OIDC token or package
   # write access.
   pull_request:
@@ -140,6 +142,7 @@ jobs:
       is_release: ${{ steps.meta.outputs.is_release }}
       image_ref: ${{ steps.meta.outputs.image_ref }}
       ai_assisted: ${{ steps.ai.outputs.ai_assisted }}
+      deployable: ${{ steps.deployable.outputs.deployable }}
 
     steps:
       # Full history so the AIAssisted check can read every commit in the push
@@ -221,6 +224,29 @@ jobs:
 
           echo "AIAssisted: $AI_ASSISTED"
           echo "ai_assisted=$AI_ASSISTED" >> "$GITHUB_OUTPUT"
+
+      # A pull request gets a release, and so a pr-<num> environment, only when
+      # it changes something that deploys. A change to only this workflow still
+      # builds, so the workflow itself is tested, but creates no environment.
+      - name: Check for deployable changes
+        id: deployable
+        env:
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
+            echo "deployable=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          changed=$(git diff --name-only "$PR_BASE...$PR_HEAD" -- \
+            src db/migrations Dockerfile .dockerignore k8s .octopus)
+          if [[ -n "$changed" ]]; then
+            echo "Deployable changes:"; echo "$changed"
+            echo "deployable=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No deployable changes: build only, no release or pr-${{ github.event.pull_request.number }} environment."
+            echo "deployable=false" >> "$GITHUB_OUTPUT"
+          fi
 
       # ── Step 2: Set up Buildx ────────────────────────────────────────────────
       # Required for BuildKit features: multi-stage caching and GHA cache backend.
@@ -505,7 +531,10 @@ jobs:
   release:
     name: Release to ${{ matrix.project }}
     needs: [build, octopus-packages]
-    if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'skip-ephemeral')
+    if: >-
+      github.event_name == 'pull_request'
+      && needs.build.outputs.deployable == 'true'
+      && !contains(github.event.pull_request.labels.*.name, 'skip-ephemeral')
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
