@@ -1,0 +1,249 @@
+# Release train: batches main into Development releases.
+#
+# Builds and releases are decoupled. build-image.yml builds and pushes the
+# image, SBOM, and Flyway packages on every main push, and only pull requests
+# create releases there. This workflow creates the Development release for main,
+# on a schedule, and only when something changed since the last one. A burst of
+# merges, or a run of Octopus UI edits committed straight to main, becomes one
+# release instead of one each.
+#
+# Per project (matrix), it releases when either is true:
+#   - Files changed between the last release's GIT_COMMIT_SHA and main: the app
+#     paths, k8s/, or the project's own .octopus/<folder>/.
+#   - A newer container build exists than the last release's packages (for
+#     example the weekly base image rebuild, which changes no files).
+# Otherwise it does nothing, silently.
+#
+# Release numbers are 1.2.<train run>, independent of package versions. A batch
+# with only process changes has no new package version, so the release number
+# can't be the package version. 1.2 sorts above the old 1.0.<run> releases, so
+# Calculate Deployment Mode sees the first train release as a Deploy.
+# Packages are pinned to the newest stable 1.0.<run> container build. The
+# server path pushes developmentloop-flyway too, at 1.1.<run>, so "latest"
+# would pick the wrong one.
+#
+# AIAssisted covers the whole batch: true when any commit since the last
+# release has an AI co-author trailer.
+#
+# Run it by hand to release now. force releases even when nothing changed.
+# The train skips a run while a Build image run on main is still going, so it
+# never releases half-pushed packages. The next run picks it up.
+
+name: Release train
+
+on:
+  schedule:
+    - cron: "17 * * * *"   # hourly, off the top of the hour where GitHub delays schedules most
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Release even when nothing changed since the last release"
+        type: boolean
+        default: false
+
+# One train at a time. A run that starts while another is going waits.
+concurrency:
+  group: release-train
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read     # check for a Build image run still in progress
+  id-token: write   # OIDC login to Octopus
+
+env:
+  OCTOPUS_SERVER_URL: https://creid.octopus.app
+  OCTOPUS_SERVICE_ACCOUNT_ID: d7b6439c-edd8-4f5c-b035-ad3a647807b4
+  OCTOPUS_CLI_VERSION: "2.27.0"
+  FLYWAY_PACKAGE: developmentloop-flyway
+  # Container builds are 1.0.<run>. Release numbers are 1.2.<train run>.
+  BUILD_VERSION_PATTERN: '^1\.0\.[0-9]+$'
+  RELEASE_VERSION: 1.2.${{ github.run_number }}
+  # Paths every container track deploys from. Each project adds its own
+  # .octopus/<folder>/ (see PROJECT_FOLDERS).
+  RELEASE_PATHS: "src db/migrations Dockerfile .dockerignore k8s"
+  PROJECT_FOLDERS: >-
+    {
+      "PT - Raw YAML": ".octopus/pt-raw-yaml",
+      "PT - Kustomize": ".octopus/pt-kustomize",
+      "PT - Helm": ".octopus/pt-helm"
+    }
+
+jobs:
+  release:
+    name: Release ${{ matrix.project }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project: ${{ fromJSON(vars.OCTOPUS_PROJECTS || '["PT - Raw YAML","PT - Kustomize","PT - Helm"]') }}
+
+    env:
+      PROJECT: ${{ matrix.project }}
+      SPACE: ${{ secrets.OCTOPUS_SPACE }}
+      # Tenant tag for this project's tenanted Development deploy. Empty: no tenant deploy.
+      TENANT_DEPLOY_TAG: ${{ fromJSON(vars.OCTOPUS_TENANT_DEPLOYS || '{}')[matrix.project] || '' }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0   # the change and AI checks read history back to the last release
+
+      - name: Skip while a main build is running
+        id: guard
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          running=$(gh run list --workflow build-image.yml --branch main --limit 20 \
+            --json status --jq '[.[] | select(.status != "completed")] | length')
+          if [[ "$running" -gt 0 ]]; then
+            echo "A Build image run on main is still going. The next train picks it up."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Log in to Octopus Deploy
+        if: steps.guard.outputs.skip != 'true'
+        uses: OctopusDeploy/login@v2
+        with:
+          server: ${{ env.OCTOPUS_SERVER_URL }}
+          service_account_id: ${{ env.OCTOPUS_SERVICE_ACCOUNT_ID }}
+
+      # The CLI reads OCTOPUS_URL and OCTOPUS_ACCESS_TOKEN from the login step.
+      - name: Install Octopus CLI
+        if: steps.guard.outputs.skip != 'true'
+        uses: OctopusDeploy/install-octopus-cli-action@v4
+        with:
+          version: ${{ env.OCTOPUS_CLI_VERSION }}
+
+      - name: Decide whether to release
+        id: plan
+        if: steps.guard.outputs.skip != 'true'
+        env:
+          FORCE: ${{ inputs.force || 'false' }}
+        run: |
+          set -euo pipefail
+          SPACE_ID=$(octopus space view "$SPACE" -f json | jq -r '.Id')
+          PROJECT_ID=$(octopus project view "$PROJECT" --space "$SPACE" -f json | jq -r '.Id')
+          FOLDER=$(jq -r --arg p "$PROJECT" '.[$p] // ""' <<<"$PROJECT_FOLDERS")
+
+          # The last stable release: the newest one without a pre-release tag.
+          # Pull request releases (1.0.<run>-pr-<n>) are skipped.
+          last=$(octopus api "/api/$SPACE_ID/projects/$PROJECT_ID/releases?take=50" \
+            | jq -c '[.Items[] | select(.Version | contains("-") | not)] | first // {}')
+          LAST_VERSION=$(jq -r '.Version // ""' <<<"$last")
+          LAST_SHA=$(jq -r '.CustomFields.GIT_COMMIT_SHA // ""' <<<"$last")
+          LAST_BUILD=$(jq -r --arg ref "Flyway.Package.Value" \
+            '[.SelectedPackages[]? | select(.PackageReferenceName == $ref) | .Version] | first // ""' <<<"$last")
+
+          # The newest stable container build in the feed.
+          BUILD=$(octopus api "/api/$SPACE_ID/feeds/feeds-builtin/packages/versions?packageId=$FLYWAY_PACKAGE&take=100" \
+            | jq -r --arg re "$BUILD_VERSION_PATTERN" '[.Items[].Version | select(test($re))] | first // ""')
+          if [[ -z "$BUILD" ]]; then
+            echo "No stable container build of $FLYWAY_PACKAGE found."; exit 1
+          fi
+
+          # The commit checked out (main), not github.sha: a manual run started
+          # from another branch still releases main.
+          HEAD_SHA=$(git rev-parse HEAD)
+          echo "Last release: ${LAST_VERSION:-none} at ${LAST_SHA:-unknown}, build ${LAST_BUILD:-unknown}"
+          echo "Newest build: $BUILD. main: $HEAD_SHA"
+
+          reasons=()
+          if [[ -z "$LAST_SHA" ]] || ! git cat-file -e "$LAST_SHA^{commit}" 2>/dev/null; then
+            # No usable starting point: release, and judge AI from the last merge.
+            RANGE="HEAD^1..HEAD"
+            reasons+=("no usable commit on the last release")
+          else
+            RANGE="$LAST_SHA..HEAD"
+            # shellcheck disable=SC2086
+            changed=$(git diff --name-only "$LAST_SHA" HEAD -- $RELEASE_PATHS ${FOLDER:+"$FOLDER"} | wc -l)
+            [[ "$changed" -gt 0 ]] && reasons+=("$changed file(s) changed since $LAST_VERSION")
+          fi
+          [[ "$BUILD" != "$LAST_BUILD" ]] && reasons+=("new build $BUILD")
+          [[ "$FORCE" == "true" ]] && reasons+=("forced")
+
+          if [[ ${#reasons[@]} -eq 0 ]]; then
+            echo "Nothing changed since $LAST_VERSION. No release."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          AI_ASSISTED="false"
+          if git log --format=%B "$RANGE" | grep -Eiq '^co-authored-by:.*(claude|anthropic|copilot|codex|cursor)'; then
+            AI_ASSISTED="true"
+          fi
+          commits=$(git rev-list --count "$RANGE")
+
+          echo "Releasing: $(IFS=';'; echo "${reasons[*]}"). $commits commit(s) in $RANGE, AIAssisted $AI_ASSISTED."
+          {
+            echo "release=true"
+            echo "head=$HEAD_SHA"
+            echo "build=$BUILD"
+            echo "ai_assisted=$AI_ASSISTED"
+            echo "range=$RANGE"
+            echo "commits=$commits"
+            echo "last_version=$LAST_VERSION"
+            echo "reasons=$(IFS=';'; echo "${reasons[*]}")"
+          } >> "$GITHUB_OUTPUT"
+
+      # package_version applies to every package in the project, so the image,
+      # SBOM, and Flyway packages all resolve to the same container build.
+      # ignore_existing makes "Re-run jobs" safe.
+      - name: Create Octopus release
+        if: steps.plan.outputs.release == 'true'
+        uses: OctopusDeploy/create-release-action@v4
+        with:
+          space: ${{ secrets.OCTOPUS_SPACE }}
+          project: ${{ matrix.project }}
+          release_number: ${{ env.RELEASE_VERSION }}
+          package_version: ${{ steps.plan.outputs.build }}
+          ignore_existing: true
+          git_ref: refs/heads/main
+          custom_fields: |
+            GH_WORKFLOW_RUN:${{ github.run_id }}
+            GIT_COMMIT_SHA:${{ steps.plan.outputs.head }}
+            AIAssisted:${{ steps.plan.outputs.ai_assisted }}
+
+      - name: Deploy to Development
+        if: steps.plan.outputs.release == 'true'
+        uses: OctopusDeploy/deploy-release-action@v4
+        with:
+          space: ${{ secrets.OCTOPUS_SPACE }}
+          project: ${{ matrix.project }}
+          release_number: ${{ env.RELEASE_VERSION }}
+          environments: Development
+
+      # Tenants get the same release in Development. A project that becomes tenanted
+      # only should drop the untenanted deploy above.
+      - name: Deploy to Development tenants
+        if: steps.plan.outputs.release == 'true' && env.TENANT_DEPLOY_TAG != ''
+        uses: OctopusDeploy/deploy-release-tenanted-action@v4
+        with:
+          space: ${{ secrets.OCTOPUS_SPACE }}
+          project: ${{ matrix.project }}
+          release_number: ${{ env.RELEASE_VERSION }}
+          environment: Development
+          tenant_tags: ${{ env.TENANT_DEPLOY_TAG }}
+
+      - name: Summary
+        if: always() && steps.guard.outputs.skip != 'true'
+        env:
+          RELEASE: ${{ steps.plan.outputs.release }}
+        run: |
+          {
+            echo "### ${PROJECT}"
+            if [[ "$RELEASE" == "true" ]]; then
+              echo "| | |"
+              echo "| --- | --- |"
+              echo "| **Release** | \`${RELEASE_VERSION}\` (after \`${{ steps.plan.outputs.last_version }}\`) |"
+              echo "| **Why** | ${{ steps.plan.outputs.reasons }} |"
+              echo "| **Packages** | \`${{ steps.plan.outputs.build }}\` |"
+              echo "| **Commits** | ${{ steps.plan.outputs.commits }} in \`${{ steps.plan.outputs.range }}\` |"
+              echo "| **AIAssisted** | ${{ steps.plan.outputs.ai_assisted }} |"
+            else
+              echo "No release: nothing changed since the last one."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

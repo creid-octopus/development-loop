@@ -28,14 +28,14 @@
 # actions/attest-build-provenance and stored in GitHub's attestation store.
 # Verify with: gh attestation verify oci://<image>:<tag> --repo <owner>/<repo>
 #
-# Octopus release: after the image is pushed, two more jobs run (skipped on dry runs).
+# Octopus: after the image is pushed, two more jobs run (skipped on dry runs).
 #   octopus-packages → packages db/migrations as a Flyway zip, pushes it, and pushes
 #                      build information for the image, SBOM, and Flyway packages
-#   release          → one job per Octopus project (matrix): creates a release at the
-#                      same version as the image, then deploys main builds to Development,
-#                      untenanted and to the project's tenants (see OCTOPUS_TENANT_DEPLOYS)
-# One workflow run means one version. The image tag, the packages, and the release
-# number are all 1.0.<run>, so a release always points at the image it came from.
+#   release          → pull requests only: one job per Octopus project (matrix) creates
+#                      a release in the Pull Requests channel at the image's version
+# Builds of main only build and push packages. release-train.yml creates the
+# Development releases for main on a schedule, batching everything since the last
+# one. Run it by hand to release now. The image tag and packages are 1.0.<run>.
 # Traceability: build information carries the commit, and the release custom fields
 # GH_WORKFLOW_RUN and GIT_COMMIT_SHA link back to the run and the SHA.
 # AIAssisted is true when a commit in the push or pull request has an AI
@@ -44,15 +44,11 @@
 # The skip-ephemeral label skips the pull request release (see the release job).
 # pr-environment-teardown.yml deprovisions pr-<num> when the pull request closes.
 #
-# Octopus projects come from the OCTOPUS_PROJECTS repo variable (a JSON list of
-# project names). When it is unset the three PT projects are used. Pull request
-# releases go only to projects in OCTOPUS_PR_PROJECTS (default: the three PT
-# container projects), because each project needs its own Pull Requests channel.
+# Pull request releases go only to projects in OCTOPUS_PR_PROJECTS (default: the
+# three PT container projects), because each project needs its own Pull Requests
+# channel. release-train.yml reads OCTOPUS_PROJECTS for the main releases.
 #
-# Tenants: OCTOPUS_TENANT_DEPLOYS maps a project to the tenant tag whose tenants get
-# each main build in Development, for example {"PT - Helm":"Development Loop/Auto Deploy"}.
-# A project not in the map, or an unset variable, deploys untenanted only. Provision a
-# tenant's database before tagging it: a tenant deploy fails without one.
+# Tenant deploys to Development happen in release-train.yml (OCTOPUS_TENANT_DEPLOYS).
 #
 # Future: replace attestation with cosign sign for registry-agnostic signatures.
 
@@ -70,6 +66,8 @@ on:
 
   # The main paths, plus the chart, manifests, process, and this workflow: a
   # pull request environment deploys those from the pull request's branch.
+  # A change to only this workflow builds but gets no environment (see the
+  # deployable step).
   # Forks are skipped in the build job: they get no OIDC token or package
   # write access.
   pull_request:
@@ -144,6 +142,7 @@ jobs:
       is_release: ${{ steps.meta.outputs.is_release }}
       image_ref: ${{ steps.meta.outputs.image_ref }}
       ai_assisted: ${{ steps.ai.outputs.ai_assisted }}
+      deployable: ${{ steps.deployable.outputs.deployable }}
 
     steps:
       # Full history so the AIAssisted check can read every commit in the push
@@ -225,6 +224,29 @@ jobs:
 
           echo "AIAssisted: $AI_ASSISTED"
           echo "ai_assisted=$AI_ASSISTED" >> "$GITHUB_OUTPUT"
+
+      # A pull request gets a release, and so a pr-<num> environment, only when
+      # it changes something that deploys. A change to only this workflow still
+      # builds, so the workflow itself is tested, but creates no environment.
+      - name: Check for deployable changes
+        id: deployable
+        env:
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
+            echo "deployable=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          changed=$(git diff --name-only "$PR_BASE...$PR_HEAD" -- \
+            src db/migrations Dockerfile .dockerignore k8s .octopus)
+          if [[ -n "$changed" ]]; then
+            echo "Deployable changes:"; echo "$changed"
+            echo "deployable=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No deployable changes: build only, no release or pr-${{ github.event.pull_request.number }} environment."
+            echo "deployable=false" >> "$GITHUB_OUTPUT"
+          fi
 
       # ── Step 2: Set up Buildx ────────────────────────────────────────────────
       # Required for BuildKit features: multi-stage caching and GHA cache backend.
@@ -509,19 +531,18 @@ jobs:
   release:
     name: Release to ${{ matrix.project }}
     needs: [build, octopus-packages]
-    if: inputs.dry_run != true && !contains(github.event.pull_request.labels.*.name, 'skip-ephemeral')
+    if: >-
+      github.event_name == 'pull_request'
+      && needs.build.outputs.deployable == 'true'
+      && !contains(github.event.pull_request.labels.*.name, 'skip-ephemeral')
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        # Override with a repo variable, for example:
-        #   ["PT - ArgoCD - Raw YAML"]
-        # Pull requests use OCTOPUS_PR_PROJECTS: only projects with a Pull Requests channel.
-        project: ${{ fromJSON(github.event_name == 'pull_request' && (vars.OCTOPUS_PR_PROJECTS || '["PT - Raw YAML","PT - Kustomize","PT - Helm"]') || (vars.OCTOPUS_PROJECTS || '["PT - Raw YAML","PT - Kustomize","PT - Helm"]')) }}
+        # OCTOPUS_PR_PROJECTS: only projects with a Pull Requests channel.
+        project: ${{ fromJSON(vars.OCTOPUS_PR_PROJECTS || '["PT - Raw YAML","PT - Kustomize","PT - Helm"]') }}
 
     env:
-      # Tenant tag for this project's tenanted Development deploy. Empty: no tenant deploy.
-      TENANT_DEPLOY_TAG: ${{ fromJSON(vars.OCTOPUS_TENANT_DEPLOYS || '{}')[matrix.project] || '' }}
       # Steps with Git resources (the chart or manifests), by project. A pull
       # request release points them at the pull request's branch, so chart and
       # manifest changes reach its environment. Names are the expanded step
@@ -543,7 +564,6 @@ jobs:
       # One StepName:GitRef line per Git resource step in this project.
       - name: Git resources for the pull request
         id: git_resources
-        if: github.event_name == 'pull_request'
         env:
           PROJECT: ${{ matrix.project }}
           GIT_REF: refs/heads/${{ github.head_ref }}
@@ -558,27 +578,11 @@ jobs:
       # SBOM, and Flyway packages all resolve to this run's version.
       # ignore_existing makes "Re-run jobs" safe: the release number is the
       # version, and a re-run reuses it instead of failing.
-      - name: Create Octopus release
-        if: github.event_name != 'pull_request'
-        uses: OctopusDeploy/create-release-action@v4
-        with:
-          space: ${{ secrets.OCTOPUS_SPACE }}
-          project: ${{ matrix.project }}
-          package_version: ${{ needs.build.outputs.version }}
-          release_number: ${{ needs.build.outputs.version }}
-          ignore_existing: true
-          git_ref: ${{ github.ref }}
-          custom_fields: |
-            GH_WORKFLOW_RUN:${{ github.run_id }}
-            GIT_COMMIT_SHA:${{ github.sha }}
-            AIAssisted:${{ needs.build.outputs.ai_assisted }}
-
       # Pull requests: the Pull Requests channel names the ephemeral environment
       # pr-<PullRequestNumber> and deploys to it automatically, so there is no
       # deploy step. The process comes from the pull request's head branch, so
       # OCL changes in the pull request are part of its release.
       - name: Create Octopus release for the pull request
-        if: github.event_name == 'pull_request'
         uses: OctopusDeploy/create-release-action@v4
         with:
           space: ${{ secrets.OCTOPUS_SPACE }}
@@ -595,25 +599,3 @@ jobs:
             GIT_COMMIT_SHA:${{ github.event.pull_request.head.sha }}
             AIAssisted:${{ needs.build.outputs.ai_assisted }}
             PullRequestNumber:${{ github.event.pull_request.number }}
-
-      # Main builds go to Development. Promotion after that is Octopus's job.
-      - name: Deploy to Development
-        if: needs.build.outputs.is_release == 'true'
-        uses: OctopusDeploy/deploy-release-action@v4
-        with:
-          space: ${{ secrets.OCTOPUS_SPACE }}
-          project: ${{ matrix.project }}
-          release_number: ${{ needs.build.outputs.version }}
-          environments: Development
-
-      # Tenants get the same release in Development. A project that becomes tenanted
-      # only should drop the untenanted deploy above.
-      - name: Deploy to Development tenants
-        if: needs.build.outputs.is_release == 'true' && env.TENANT_DEPLOY_TAG != ''
-        uses: OctopusDeploy/deploy-release-tenanted-action@v4
-        with:
-          space: ${{ secrets.OCTOPUS_SPACE }}
-          project: ${{ matrix.project }}
-          release_number: ${{ needs.build.outputs.version }}
-          environment: Development
-          tenant_tags: ${{ env.TENANT_DEPLOY_TAG }}
