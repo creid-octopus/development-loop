@@ -148,6 +148,37 @@ Each image push produces:
 
 ---
 
+## `release-train.yml`
+
+### Builds and releases are decoupled
+
+`build-image.yml` builds and pushes packages on every `main` push, but only pull requests create releases there. `release-train.yml` creates the Development releases for `main`, hourly at :17, and only when something changed since the last release. Run it by hand to release now. Its `force` input releases even when nothing changed.
+
+Why: a release per build meant a Development release and deploy for every merge, and process-only changes (`.octopus/**`) needed a manual build to release at all. Adding `.octopus/**` to the push paths was rejected, because Octopus UI edits are often committed straight to `main` (committer `Octopus Deploy <noreply@octopus.com>`), and each one would start a build and a release. A `must-build` label was rejected as too much overhead.
+
+### What the train checks
+
+Per project, it reads the last stable release's `GIT_COMMIT_SHA` custom field and its Flyway package version. It releases when either is true:
+
+- Files changed since that commit in `src/`, `db/migrations/`, `Dockerfile`, `.dockerignore`, `k8s/`, or the project's own `.octopus/<folder>/`.
+- A newer `1.0.<run>` container build exists. The weekly rebuild changes no files, but its patched base image still ships.
+
+It skips a run while a `Build image` run on `main` is still going, so it never releases half-pushed packages.
+
+### Release numbers are `1.2.<train run>`
+
+A batch with only process changes has no new package version, so the release number can't be the package version. `1.2` sorts above the old `1.0.<run>` releases, so `Calculate Deployment Mode` treats the first train release as a Deploy, not a Rollback. Packages stay `1.0.<run>`.
+
+### Packages are pinned, never "latest"
+
+The server path (`build-package.yml`) pushes `developmentloop-flyway` too, at `1.1.<run>`. In the feed those versions rank above the container builds, so "latest" would pick a server build. The train pins every package to the newest stable `1.0.<run>`.
+
+### `AIAssisted` covers the batch
+
+`AIAssisted` is `true` when any commit since the last release has an AI co-author trailer. A batch with one AI commit pauses for review in Test and Production, so most batches will.
+
+---
+
 ## `testbed-package.yml`
 
 ### Dispatch-only, no auto-triggers
