@@ -66,7 +66,7 @@ Local details: [`docs/local-development.md`](docs/local-development.md).
 ### Builds and releases
 
 - GitHub Actions builds the image and the Flyway package and pushes build information. `build-image.yml` creates releases for pull requests only. `release-train.yml` creates the Development releases for `main`, hourly, batching everything since the last release. Run it by hand to release now. Main release numbers are `1.2.<train run>`. Packages stay `1.0.<run>`. Details: [`docs/workflow-decisions.md`](docs/workflow-decisions.md#release-trainyml).
-- The server path has its own workflow, `build-package.yml`. It builds the app zip, the SBOM zip, and the Flyway zip at version `1.1.<run>`. The container path stays at `1.0.<run>`. Details: [`docs/server-deployment.md`](docs/server-deployment.md).
+- The server path has its own workflow, `build-package.yml`. It builds the app zip, the SBOM zip, and the Flyway zip (`developmentloop-app-flyway`) at version `1.1.<run>`. The container path stays at `1.0.<run>`. `main` builds of either path only push packages. The release train releases all four projects. Details: [`docs/server-deployment.md`](docs/server-deployment.md).
 - A server package never contains the Node.js runtime. Keep the minimum runtime check in the deployment.
 - Release custom fields: `PullRequestNumber` and `AIAssisted` (`true` or `false`). Octopus allows at most 10 fields, each 150 characters or less.
 - Set `AIAssisted` to `true` when a commit has an AI co-author trailer or the pull request has the `ai-assisted` label.

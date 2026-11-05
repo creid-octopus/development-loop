@@ -1,5 +1,8 @@
 # Server package build. Builds a zip of the app with its dependencies for Linux
-# servers, then pushes it to Octopus and creates a release.
+# servers and pushes it to Octopus. Builds of main don't create a release:
+# release-train.yml releases PT - Linux Package to Development on a schedule,
+# batching everything since the last release. Builds of other branches still get
+# a pre-release release, for testing a branch by hand.
 #
 # This is the server path. The container path is build-image.yml. The two share
 # the app code and the database packages. They do not share a version line.
@@ -231,10 +234,13 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   # ── Octopus release ────────────────────────────────────────────────────────
+  # Branch builds only: a pre-release (0.0.0-<branch>.<run>) to deploy by hand.
+  # The release train ignores pre-releases. Main builds release through
+  # release-train.yml.
   release:
     name: Release to Octopus
     needs: package
-    if: inputs.dry_run != true
+    if: inputs.dry_run != true && needs.package.outputs.is_release != 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -258,12 +264,3 @@ jobs:
           custom_fields: |
             GH_WORKFLOW_RUN:${{ github.run_id }}
             GIT_COMMIT_SHA:${{ github.sha }}
-
-      - name: Deploy to Development
-        if: needs.package.outputs.is_release == 'true'
-        uses: OctopusDeploy/deploy-release-action@v4
-        with:
-          space: ${{ secrets.OCTOPUS_SPACE }}
-          project: ${{ vars.OCTOPUS_SERVER_PROJECT || 'PT - Linux Package' }}
-          release_number: ${{ needs.package.outputs.version }}
-          environments: Development

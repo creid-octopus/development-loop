@@ -159,7 +159,7 @@ A pull request gets a release, and so a `pr-<number>` environment, only when it 
 
 ### Builds and releases are decoupled
 
-`build-image.yml` builds and pushes packages on every `main` push, but only pull requests create releases there. `release-train.yml` creates the Development releases for `main`, hourly at :17, and only when something changed since the last release. Run it by hand to release now. Its `force` input releases even when nothing changed.
+`build-image.yml` and `build-package.yml` build and push packages on every `main` push, but neither creates a release for `main`. `build-image.yml` releases pull requests only. `build-package.yml` releases branch builds only, as `0.0.0-…` pre-releases for testing by hand. `release-train.yml` creates the Development releases for `main`, for all four projects, hourly at :17, and only when something changed since the last release. Run it by hand to release now. Its `force` input releases even when nothing changed.
 
 Why: a release per build meant a Development release and deploy for every merge, and process-only changes (`.octopus/**`) needed a manual build to release at all. Adding `.octopus/**` to the push paths was rejected, because Octopus UI edits are often committed straight to `main` (committer `Octopus Deploy <noreply@octopus.com>`), and each one would start a build and a release. A `must-build` label was rejected as too much overhead.
 
@@ -167,18 +167,25 @@ Why: a release per build meant a Development release and deploy for every merge,
 
 Per project, it reads the last stable release's `GIT_COMMIT_SHA` custom field and its Flyway package version. It releases when either is true:
 
-- Files changed since that commit in `src/`, `db/migrations/`, `Dockerfile`, `.dockerignore`, `k8s/`, or the project's own `.octopus/<folder>/`.
-- A newer `1.0.<run>` container build exists. The weekly rebuild changes no files, but its patched base image still ships.
+- Files changed since that commit in the project's source paths or its own `.octopus/<folder>/`.
+- A newer build of the project's version line exists. The weekly container rebuild changes no files, but its patched base image still ships.
 
-It skips a run while a `Build image` run on `main` is still going, so it never releases half-pushed packages.
+`PROJECT_CONFIG` in the workflow holds each project's settings:
+
+| Project | Source paths | Flyway package | Build line | Build workflow |
+|---|---|---|---|---|
+| `PT - Raw YAML`, `PT - Kustomize`, `PT - Helm` | `src/`, `db/migrations/`, `Dockerfile`, `.dockerignore`, `k8s/` | `developmentloop-flyway` | `1.0.<run>` | `build-image.yml` |
+| `PT - Linux Package` | `src/`, `db/migrations/`, `deploy/server/` | `developmentloop-app-flyway` | `1.1.<run>` | `build-package.yml` |
+
+A project's job skips while its build workflow is still running on `main`, so it never releases half-pushed packages.
 
 ### Release numbers are `1.2.<train run>`
 
-A batch with only process changes has no new package version, so the release number can't be the package version. `1.2` sorts above the old `1.0.<run>` releases, so `Calculate Deployment Mode` treats the first train release as a Deploy, not a Rollback. Packages stay `1.0.<run>`.
+A batch with only process changes has no new package version, so the release number can't be the package version. `1.2` sorts above the old `1.0.<run>` container releases and `1.1.<run>` server releases, so `Calculate Deployment Mode` treats each project's first train release as a Deploy, not a Rollback. Packages keep their own version lines.
 
 ### Packages are pinned, never "latest"
 
-The server path (`build-package.yml`) used to push `developmentloop-flyway` too, at `1.1.<run>`. In the feed those versions rank above the container builds, so "latest" would pick a server build. The server path now pushes `developmentloop-app-flyway`, but the old `1.1.x` versions stay in the feed under the shared id until retention removes them. The train pins every package to the newest stable `1.0.<run>` either way.
+The server path (`build-package.yml`) used to push `developmentloop-flyway` too, at `1.1.<run>`. In the feed those versions rank above the container builds, so "latest" would pick a server build. The server path now pushes `developmentloop-app-flyway`, but the old `1.1.x` versions stay in the feed under the shared id until retention removes them. The train pins each project to the newest stable build of its own line either way: `1.0.<run>` for the container tracks, `1.1.<run>` for the server path.
 
 ### `AIAssisted` covers the batch
 
