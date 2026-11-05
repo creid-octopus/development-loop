@@ -1,10 +1,14 @@
 process_template "predeploy-boilerplate" {
     name = "Predeploy Boilerplate"
     process_template_slug = "predeploy-boilerplate"
-    version_mask = "1.X"
+    version_mask = "2.X"
 
     parameter "Predeploy.WorkerPool" {
         value = "WorkerPools-82"
+    }
+
+    parameter "Predeploy.AIReview.RunEnvs" {
+        value = "Environments-3,Environments-4"
     }
 }
 

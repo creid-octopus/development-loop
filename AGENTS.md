@@ -70,6 +70,7 @@ Local details: [`docs/local-development.md`](docs/local-development.md).
 - A server package never contains the Node.js runtime. Keep the minimum runtime check in the deployment.
 - Release custom fields: `PullRequestNumber` and `AIAssisted` (`true` or `false`). Octopus allows at most 10 fields, each 150 characters or less.
 - Set `AIAssisted` to `true` when a commit has an AI co-author trailer or the pull request has the `ai-assisted` label.
+- An AI-assisted release pauses at `Confirm AI-assisted release` in `predeploy-boilerplate` the first time it deploys to Test or Production (`Predeploy.AIReview.RunEnvs`). Development and pull request environments don't pause. The `Require Predeploy Gates` policy requires that step, because a policy can't read release custom fields.
 - Commits made by an agent must include a `Co-authored-by` trailer.
 
 ### Secrets
