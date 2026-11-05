@@ -171,7 +171,7 @@ A batch with only process changes has no new package version, so the release num
 
 ### Packages are pinned, never "latest"
 
-The server path (`build-package.yml`) pushes `developmentloop-flyway` too, at `1.1.<run>`. In the feed those versions rank above the container builds, so "latest" would pick a server build. The train pins every package to the newest stable `1.0.<run>`.
+The server path (`build-package.yml`) used to push `developmentloop-flyway` too, at `1.1.<run>`. In the feed those versions rank above the container builds, so "latest" would pick a server build. The server path now pushes `developmentloop-app-flyway`, but the old `1.1.x` versions stay in the feed under the shared id until retention removes them. The train pins every package to the newest stable `1.0.<run>` either way.
 
 ### `AIAssisted` covers the batch
 

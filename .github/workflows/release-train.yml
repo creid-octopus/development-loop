@@ -18,9 +18,10 @@
 # with only process changes has no new package version, so the release number
 # can't be the package version. 1.2 sorts above the old 1.0.<run> releases, so
 # Calculate Deployment Mode sees the first train release as a Deploy.
-# Packages are pinned to the newest stable 1.0.<run> container build. The
-# server path pushes developmentloop-flyway too, at 1.1.<run>, so "latest"
-# would pick the wrong one.
+# Packages are pinned to the newest stable 1.0.<run> container build, never
+# "latest". The server path used to push developmentloop-flyway at 1.1.<run>
+# (it now has developmentloop-app-flyway), and older 1.1.x versions stay in
+# the feed under the shared id.
 #
 # AIAssisted covers the whole batch: true when any commit since the last
 # release has an AI co-author trailer.
