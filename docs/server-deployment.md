@@ -8,6 +8,7 @@ This page describes the Linux server path. It deploys the same app as the contai
 | --- | --- | --- |
 | Build workflow | `build-image.yml` | `build-package.yml` |
 | Artifact | Image in GHCR | Zip `developmentloop-app` on the Octopus built-in feed |
+| Flyway package | `developmentloop-flyway` | `developmentloop-app-flyway` |
 | Version line | `1.0.<run>` | `1.1.<run>` |
 | SBOM | Filesystem scan of the repository | Scan of the folder inside the zip |
 | Runtime | In the image | On the server |

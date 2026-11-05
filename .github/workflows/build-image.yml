@@ -238,8 +238,11 @@ jobs:
             echo "deployable=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          # Only the container projects' .octopus folders: they're the projects
+          # with pull request environments (OCTOPUS_PR_PROJECTS).
           changed=$(git diff --name-only "$PR_BASE...$PR_HEAD" -- \
-            src db/migrations Dockerfile .dockerignore k8s .octopus)
+            src db/migrations Dockerfile .dockerignore k8s \
+            .octopus/pt-raw-yaml .octopus/pt-kustomize .octopus/pt-helm)
           if [[ -n "$changed" ]]; then
             echo "Deployable changes:"; echo "$changed"
             echo "deployable=true" >> "$GITHUB_OUTPUT"

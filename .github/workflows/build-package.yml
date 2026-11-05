@@ -10,7 +10,8 @@
 # What one run produces, all at one version:
 #   developmentloop-app        zip of src/ with production node_modules and deploy/server/
 #   developmentloop-app-sbom   SPDX SBOM of exactly what is in the zip
-#   developmentloop-flyway     zip of db/migrations
+#   developmentloop-app-flyway zip of db/migrations. Its own id: the container path
+#                              pushes developmentloop-flyway at 1.0.<run>
 # Provenance attestation covers all three zips on main.
 # Verify after a run:
 #   gh attestation verify packaging/developmentloop-app.<version>.zip --repo <owner>/<repo>
@@ -49,7 +50,7 @@ permissions:
 env:
   APP_PACKAGE: developmentloop-app
   SBOM_PACKAGE: developmentloop-app-sbom
-  FLYWAY_PACKAGE: developmentloop-flyway
+  FLYWAY_PACKAGE: developmentloop-app-flyway
   # Neither value is a secret. The service account only trusts tokens issued to this repo.
   OCTOPUS_SERVER_URL: https://creid.octopus.app
   OCTOPUS_SERVICE_ACCOUNT_ID: d7b6439c-edd8-4f5c-b035-ad3a647807b4
