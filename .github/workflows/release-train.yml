@@ -8,27 +8,29 @@
 # release instead of one each.
 #
 # Per project (matrix), it releases when either is true:
-#   - Files changed between the last release's GIT_COMMIT_SHA and main: the app
-#     paths, k8s/, or the project's own .octopus/<folder>/.
-#   - A newer container build exists than the last release's packages (for
-#     example the weekly base image rebuild, which changes no files).
+#   - Files changed between the last release's GIT_COMMIT_SHA and main: the
+#     project's source paths, or its own .octopus/<folder>/ (PROJECT_CONFIG).
+#   - A newer build exists than the last release's packages (for example the
+#     weekly base image rebuild, which changes no files).
 # Otherwise it does nothing, silently.
 #
 # Release numbers are 1.2.<train run>, independent of package versions. A batch
 # with only process changes has no new package version, so the release number
-# can't be the package version. 1.2 sorts above the old 1.0.<run> releases, so
-# Calculate Deployment Mode sees the first train release as a Deploy.
-# Packages are pinned to the newest stable 1.0.<run> container build, never
-# "latest". The server path used to push developmentloop-flyway at 1.1.<run>
-# (it now has developmentloop-app-flyway), and older 1.1.x versions stay in
-# the feed under the shared id.
+# can't be the package version. 1.2 sorts above the old 1.0.<run> container
+# releases and 1.1.<run> server releases, so Calculate Deployment Mode sees the
+# first train release as a Deploy.
+# Packages are pinned to the newest stable build of the project's own version
+# line, never "latest": 1.0.<run> for the container tracks (build-image.yml),
+# 1.1.<run> for PT - Linux Package (build-package.yml). The server path used to
+# push developmentloop-flyway at 1.1.<run>, and those versions stay in the feed
+# under the shared id.
 #
 # AIAssisted covers the whole batch: true when any commit since the last
 # release has an AI co-author trailer.
 #
 # Run it by hand to release now. force releases even when nothing changed.
-# The train skips a run while a Build image run on main is still going, so it
-# never releases half-pushed packages. The next run picks it up.
+# A project's job skips while its build workflow is still running on main, so
+# it never releases half-pushed packages. The next run picks it up.
 
 name: Release train
 
@@ -49,25 +51,47 @@ concurrency:
 
 permissions:
   contents: read
-  actions: read     # check for a Build image run still in progress
+  actions: read     # check for a build run still in progress
   id-token: write   # OIDC login to Octopus
 
 env:
   OCTOPUS_SERVER_URL: https://creid.octopus.app
   OCTOPUS_SERVICE_ACCOUNT_ID: d7b6439c-edd8-4f5c-b035-ad3a647807b4
   OCTOPUS_CLI_VERSION: "2.27.0"
-  FLYWAY_PACKAGE: developmentloop-flyway
-  # Container builds are 1.0.<run>. Release numbers are 1.2.<train run>.
-  BUILD_VERSION_PATTERN: '^1\.0\.[0-9]+$'
   RELEASE_VERSION: 1.2.${{ github.run_number }}
-  # Paths every container track deploys from. Each project adds its own
-  # .octopus/<folder>/ (see PROJECT_FOLDERS).
-  RELEASE_PATHS: "src db/migrations Dockerfile .dockerignore k8s"
-  PROJECT_FOLDERS: >-
+  # Per project: its CaC folder, the source paths it deploys from, the Flyway
+  # package that marks a build, that build's version line (a jq regex), and the
+  # workflow that builds it.
+  PROJECT_CONFIG: >-
     {
-      "PT - Raw YAML": ".octopus/pt-raw-yaml",
-      "PT - Kustomize": ".octopus/pt-kustomize",
-      "PT - Helm": ".octopus/pt-helm"
+      "PT - Raw YAML": {
+        "folder": ".octopus/pt-raw-yaml",
+        "paths": "src db/migrations Dockerfile .dockerignore k8s",
+        "package": "developmentloop-flyway",
+        "pattern": "^1[.]0[.][0-9]+$",
+        "build": "build-image.yml"
+      },
+      "PT - Kustomize": {
+        "folder": ".octopus/pt-kustomize",
+        "paths": "src db/migrations Dockerfile .dockerignore k8s",
+        "package": "developmentloop-flyway",
+        "pattern": "^1[.]0[.][0-9]+$",
+        "build": "build-image.yml"
+      },
+      "PT - Helm": {
+        "folder": ".octopus/pt-helm",
+        "paths": "src db/migrations Dockerfile .dockerignore k8s",
+        "package": "developmentloop-flyway",
+        "pattern": "^1[.]0[.][0-9]+$",
+        "build": "build-image.yml"
+      },
+      "PT - Linux Package": {
+        "folder": ".octopus/pt-linux-package",
+        "paths": "src db/migrations deploy/server",
+        "package": "developmentloop-app-flyway",
+        "pattern": "^1[.]1[.][0-9]+$",
+        "build": "build-package.yml"
+      }
     }
 
 jobs:
@@ -77,7 +101,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        project: ${{ fromJSON(vars.OCTOPUS_PROJECTS || '["PT - Raw YAML","PT - Kustomize","PT - Helm"]') }}
+        project: ${{ fromJSON(vars.OCTOPUS_PROJECTS || '["PT - Raw YAML","PT - Kustomize","PT - Helm","PT - Linux Package"]') }}
 
     env:
       PROJECT: ${{ matrix.project }}
@@ -91,15 +115,19 @@ jobs:
           ref: main
           fetch-depth: 0   # the change and AI checks read history back to the last release
 
-      - name: Skip while a main build is running
+      - name: Skip while this project's build is running on main
         id: guard
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          running=$(gh run list --workflow build-image.yml --branch main --limit 20 \
+          BUILD_WORKFLOW=$(jq -r --arg p "$PROJECT" '.[$p].build // ""' <<<"$PROJECT_CONFIG")
+          if [[ -z "$BUILD_WORKFLOW" ]]; then
+            echo "No PROJECT_CONFIG entry for $PROJECT."; exit 1
+          fi
+          running=$(gh run list --workflow "$BUILD_WORKFLOW" --branch main --limit 20 \
             --json status --jq '[.[] | select(.status != "completed")] | length')
           if [[ "$running" -gt 0 ]]; then
-            echo "A Build image run on main is still going. The next train picks it up."
+            echo "A $BUILD_WORKFLOW run on main is still going. The next train picks it up."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
@@ -128,7 +156,10 @@ jobs:
           set -euo pipefail
           SPACE_ID=$(octopus space view "$SPACE" -f json | jq -r '.Id')
           PROJECT_ID=$(octopus project view "$PROJECT" --space "$SPACE" -f json | jq -r '.Id')
-          FOLDER=$(jq -r --arg p "$PROJECT" '.[$p] // ""' <<<"$PROJECT_FOLDERS")
+          FOLDER=$(jq -r --arg p "$PROJECT" '.[$p].folder' <<<"$PROJECT_CONFIG")
+          RELEASE_PATHS=$(jq -r --arg p "$PROJECT" '.[$p].paths' <<<"$PROJECT_CONFIG")
+          FLYWAY_PACKAGE=$(jq -r --arg p "$PROJECT" '.[$p].package' <<<"$PROJECT_CONFIG")
+          BUILD_VERSION_PATTERN=$(jq -r --arg p "$PROJECT" '.[$p].pattern' <<<"$PROJECT_CONFIG")
 
           # The last stable release: the newest one without a pre-release tag.
           # Pull request releases (1.0.<run>-pr-<n>) are skipped.
@@ -139,11 +170,11 @@ jobs:
           LAST_BUILD=$(jq -r --arg ref "Flyway.Package.Value" \
             '[.SelectedPackages[]? | select(.PackageReferenceName == $ref) | .Version] | first // ""' <<<"$last")
 
-          # The newest stable container build in the feed.
+          # The newest stable build of this project's version line in the feed.
           BUILD=$(octopus api "/api/$SPACE_ID/feeds/feeds-builtin/packages/versions?packageId=$FLYWAY_PACKAGE&take=100" \
             | jq -r --arg re "$BUILD_VERSION_PATTERN" '[.Items[].Version | select(test($re))] | first // ""')
           if [[ -z "$BUILD" ]]; then
-            echo "No stable container build of $FLYWAY_PACKAGE found."; exit 1
+            echo "No stable build of $FLYWAY_PACKAGE matching $BUILD_VERSION_PATTERN found."; exit 1
           fi
 
           # The commit checked out (main), not github.sha: a manual run started
@@ -190,8 +221,8 @@ jobs:
             echo "reasons=$(IFS=';'; echo "${reasons[*]}")"
           } >> "$GITHUB_OUTPUT"
 
-      # package_version applies to every package in the project, so the image,
-      # SBOM, and Flyway packages all resolve to the same container build.
+      # package_version applies to every package in the project, so all of its
+      # packages (image or app zip, SBOM, Flyway) resolve to the same build.
       # ignore_existing makes "Re-run jobs" safe.
       - name: Create Octopus release
         if: steps.plan.outputs.release == 'true'
