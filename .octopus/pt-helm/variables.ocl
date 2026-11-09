@@ -117,3 +117,11 @@ variable "Project.Deprovision.Confirm" {
         environment = ["ephemeral-testing"]
     }
 }
+
+variable "Tenant.ProvisionRunbook" {
+    value "create-and-provision-postgres-database" {}
+}
+
+variable "Tenant.DeprovisionRunbook" {
+    value "deprovision-postgres-database" {}
+}
