@@ -20,8 +20,8 @@ For the pauses inside the deployment process, see [`database-migrations.md`](dat
 
 | Tag set | Applies to | Tags | Used by |
 | --- | --- | --- | --- |
-| `TeamOwner` | Projects, single select | `Payments`, `Checkout` | Rule 21 (`Payments`) |
-| `EnvironmentUsage` | Environments, single select | `Shared`, `Isolated` | Rule 21 (`Shared`) |
+| `TeamOwner` | Projects, single select | `Payments`, `Checkout` | Rule 21 (`Payments`), rule 22 (`Checkout`) |
+| `EnvironmentUsage` | Environments, single select | `Shared`, `Isolated` | Rules 21 and 22 (`Shared`) |
 | `Change Approvals` | Projects, single select | `ProductionOnly`, `AllEnvs` | Rule 2 (`ProductionOnly`) |
 | `Meta-Environment` | Environments, single select | `Nonproduction`, `Production` | Rule 2 (`Production`) |
 | `ProjectStatus` | Projects, single select | `Onboarding`, `Active`, `Maintenance`, `Offboarding`, `Inactive` | No rule yet |
@@ -47,9 +47,10 @@ For the pauses inside the deployment process, see [`database-migrations.md`](dat
 | Rule | Scope | Approvers | Minimum | Self-approval | Tenants |
 | --- | --- | --- | --- | --- | --- |
 | `Shared Environment Approval - Payments` (`ApprovalRules-21`) | `TeamOwner/Payments` and `EnvironmentUsage/Shared` | Payments (`Teams-161`) | 1 | Allowed | `PerRelease` |
+| `Shared Environment Approval - Checkout` (`ApprovalRules-22`) | `TeamOwner/Checkout` and `EnvironmentUsage/Shared` | Checkout (`Teams-162`) | 1 | Allowed | `PerRelease` |
 | `Production Release Approval` (`ApprovalRules-2`) | `Change Approvals/ProductionOnly` and `Meta-Environment/Production` | Octopus Managers (`teams-managers`) | 1 | Allowed | `PerRelease` |
 
-So PT - Helm needs Payments approval in Test and Managers approval in Production. The other PT projects need no change request anywhere.
+So PT - Helm needs Payments approval in Test and Managers approval in Production. PT - Kustomize needs Checkout approval in Test. PT - Raw YAML and PT - Linux Package need no change request anywhere, and `Require Team Approval` warns on their Test deploys.
 
 ## How the gates stack up
 
@@ -62,11 +63,12 @@ A deployment that matches a rule raises an `OCT-<number>` change request when it
 | 3 | `Confirm AI-assisted release` (`predeploy-boilerplate`) | First deploy of an AI-assisted release to Test or Production | Tenant |
 | 4 | `DBA review` | Every rollback, and when the review finds risky SQL or hazards | Tenant |
 
-Confirmed November 9 on PT - Helm:
+Confirmed November 9 on PT - Helm, and on PT - Kustomize for the Checkout rule:
 
 - **Deploy.** `1.2.19` (AI-assisted) raised one change request in Test (Payments) and one in Production (Managers). Each was followed by one `Confirm AI-assisted release` pause per tenant.
 - **Redeploy.** Redeploying `1.2.19` didn't raise a second change request. It linked to the one already approved. The AI review didn't pause either.
 - **Rollback.** A Production rollback to an earlier release raised a new change request, then paused at `Confirm rollback` and at the DBA review. On a project that matches a rule, a rollback passes three gates. The rollback succeeded, and Production then rolled forward to `1.2.19`.
+- **Policy.** `Require Team Approval` warned on a PT - Raw YAML deploy to Test (`Deployments-158924`) with the no-owner message. It warned on PT - Kustomize until rule 22 was added. After that, PT - Kustomize's Test deploy raised a Checkout change request.
 
 ## Adding a team or a project
 
@@ -79,7 +81,6 @@ Editing rules needs `ApprovalRuleAdminister`. It's a space-wide permission, held
 
 ## Gaps and open questions
 
-- **Checkout has no rule yet.** PT - Kustomize has `TeamOwner/Checkout`, but no rule reads it, so its Test deploys don't need approval.
 - **One person is on both teams.** Cory is on Payments and Checkout, so the demo can't yet show a deployer who isn't allowed to approve. It needs a demo user who is on one team only.
 - **Production allows self-approval.** Turn on **Block approvals by the deployment creator** on rule 2 to show separation of duties. That needs a second person on the Managers team.
 - **Pull request environments aren't covered.** They carry no tags, so no rule matches them. That's intended.
