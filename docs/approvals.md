@@ -38,9 +38,9 @@ For the pauses inside the deployment process, see [`database-migrations.md`](dat
 | Project | `TeamOwner` | `Change Approvals` | `ProjectStatus` |
 | --- | --- | --- | --- |
 | PT - Helm | `Payments` | `ProductionOnly` | `Active` |
-| PT - Kustomize | `Checkout` | None | None |
-| PT - Raw YAML | None | None | None |
-| PT - Linux Package | None | None | None |
+| PT - Kustomize | `Checkout` | `ProductionOnly` | `Active` |
+| PT - Raw YAML | `Checkout` | `ProductionOnly` | `Active` |
+| PT - Linux Package | `Payments` | `ProductionOnly` | `Active` |
 
 ## Rules
 
@@ -50,7 +50,7 @@ For the pauses inside the deployment process, see [`database-migrations.md`](dat
 | `Shared Environment Approval - Checkout` (`ApprovalRules-22`) | `TeamOwner/Checkout` and `EnvironmentUsage/Shared` | Checkout (`Teams-162`) | 1 | Allowed | `PerRelease` |
 | `Production Release Approval` (`ApprovalRules-2`) | `Change Approvals/ProductionOnly` and `Meta-Environment/Production` | Octopus Managers (`teams-managers`) | 1 | Allowed | `PerRelease` |
 
-So PT - Helm needs Payments approval in Test and Managers approval in Production. PT - Kustomize needs Checkout approval in Test. PT - Raw YAML and PT - Linux Package need no change request anywhere, and `Require Team Approval` warns on their Test deploys.
+So in Test, PT - Helm and PT - Linux Package need Payments approval, and PT - Kustomize and PT - Raw YAML need Checkout approval. All four need Managers approval in Production.
 
 ## How the gates stack up
 
@@ -104,7 +104,7 @@ So a policy can check coverage without knowing the rules.
 | The project has no `TeamOwner` tag | "PT - Raw YAML has no `TeamOwner` tag, so no team signs off on its deploys to Test, a shared environment. Tag the project with the team that owns it." |
 | The project has an owner, but no rule matched (`RequiresApproval` is false) | "Checkout owns PT - Kustomize, but no approval rule covers it in Test, a shared environment. Other teams can deploy it here without Checkout's sign-off. To add one, ask a space manager for an approval rule on `TeamOwner/Checkout`." |
 
-**`ProjectStatus` decides the outcome.** The `action` in a Rego result overrides the policy's setting in the UI. The policy returns `block` when the project's status is in `blocking_statuses`, and `warn` otherwise. That covers `Onboarding` projects and projects with no status tag. The set is empty for now, so every violation warns. Add `ProjectStatus/Active` to make active projects block, once the Evaluations tab shows clean results.
+**`ProjectStatus` decides the outcome.** The `action` in a Rego result overrides the policy's setting in the UI. The policy returns `block` when the project's status is in `blocking_statuses`, and `warn` otherwise. That covers `Onboarding` projects and projects with no status tag. The set is `ProjectStatus/Active` (November 9, `octopus-base-infrastructure` commit after `dbf81dd`). All four PT projects are `Active`, owned, and covered by a rule, so none of them is blocked. To demo a block, remove a project's `TeamOwner` tag and deploy it to Test.
 
 The Rego was checked locally with OPA 1.10.1 (`opa check --strict`, and `opa eval` against sample inputs for each case) before it was published.
 
