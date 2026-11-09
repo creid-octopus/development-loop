@@ -57,7 +57,7 @@ permissions:
 env:
   OCTOPUS_SERVER_URL: https://creid.octopus.app
   OCTOPUS_SERVICE_ACCOUNT_ID: d7b6439c-edd8-4f5c-b035-ad3a647807b4
-  OCTOPUS_CLI_VERSION: "2.27.0"
+  OCTOPUS_CLI_VERSION: "2.31.1"
   RELEASE_VERSION: 1.2.${{ github.run_number }}
   # Per project: its CaC folder, the source paths it deploys from, the Flyway
   # package that marks a build, that build's version line (a jq regex), and the

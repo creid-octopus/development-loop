@@ -34,7 +34,7 @@ env:
   # install-octopus-cli-action resolves versions from releases.json in the
   # OctopusDeploy/cli repo, which can lag the GitHub releases. 2.27.0 is the
   # newest it lists, and it has `ephemeral-environment deprovision-project`.
-  OCTOPUS_CLI_VERSION: "2.27.0"
+  OCTOPUS_CLI_VERSION: "2.31.1"
 
 jobs:
   deprovision:
