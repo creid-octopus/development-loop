@@ -52,7 +52,7 @@ Local details: [`docs/local-development.md`](docs/local-development.md).
 ### Rollbacks
 
 - Roll forward by default. Rollback means redeploying an older release, and it's a last resort.
-- A rollback pauses twice: `Confirm rollback` in `predeploy-boilerplate`, then the DBA review before migrate. Keep `predeploy-boilerplate` first in every process, and keep the rollback expression on `Postgres.Review.Policy`.
+- A rollback pauses twice: `Confirm rollback` in `predeploy-boilerplate`, then the DBA review before migrate. Keep `predeploy-boilerplate` first in every process, and keep the rollback expression on `Postgres.Review.Policy`. If the project and environment match an approval rule, a rollback also raises a change request before it starts.
 - Migrate still runs on a rollback after DBA approval. It never undoes versioned migrations, and it can apply older `R__` files again.
 - Don't write Flyway undo scripts unless a task asks for them.
 
@@ -72,6 +72,12 @@ Local details: [`docs/local-development.md`](docs/local-development.md).
 - Set `AIAssisted` to `true` when a commit has an AI co-author trailer or the pull request has the `ai-assisted` label.
 - An AI-assisted release pauses at `Confirm AI-assisted release` in `predeploy-boilerplate` the first time it deploys to Test or Production (`Predeploy.AIReview.RunEnvs`). Development and pull request environments don't pause. The `Require Predeploy Gates` policy requires that step, because a policy can't read release custom fields.
 - Commits made by an agent must include a `Co-authored-by` trailer.
+
+### Approvals
+
+- Team approvals are Octopus Approvals rules, scoped by the `TeamOwner` project tag and the `EnvironmentUsage` environment tag. They aren't process steps or policies. Details: [`docs/approvals.md`](docs/approvals.md).
+- The rules aren't in Config as Code. Update `docs/approvals.md` when a rule or a tag changes.
+- Never tag Development with `EnvironmentUsage/Shared`. The release train deploys there unattended.
 
 ### Secrets
 

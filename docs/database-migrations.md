@@ -9,7 +9,7 @@ For the logins and the provisioning runbooks, see [`database-roles.md`](database
 - **Roll forward by default.** Fix the problem in a new release. Roll back only when it is absolutely necessary. See [The hotfix myth](https://octopus.com/blog/the-hotfix-myth).
 - **Rollback never undoes versioned migrations.** The older app runs on the newer schema. Write every migration as expand and contract so that works.
 - **A rollback needs DBA approval before migrate.** Running migrate on a rollback is not harmless. It can fail the deployment or quietly revert repeatable migrations. See [Flyway behavior](#flyway-behavior). The DBA review pauses after the review step, so the approver sees the Flyway state first. Reject to stop the rollback and roll forward instead.
-- **A rollback pauses for confirmation.** The `Confirm rollback` step in `predeploy-boilerplate` explains what a rollback does and doesn't undo before anything changes.
+- **A rollback pauses for confirmation.** The `Confirm rollback` step in `predeploy-boilerplate` explains what a rollback does and doesn't undo before anything changes. If the project and environment match an approval rule, the rollback also raises a change request when it's queued, before this step. See [`approvals.md`](approvals.md#how-the-gates-stack-up).
 - **A redeploy behaves like a deploy.** Database steps run on a redeploy. Flyway does nothing when the schema is up to date.
 
 ## How a deployment runs migrations
