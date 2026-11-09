@@ -32,10 +32,12 @@ env:
   # to this repo, as configured in Octopus.
   OCTOPUS_SERVER_URL: https://creid.octopus.app
   OCTOPUS_SERVICE_ACCOUNT_ID: d7b6439c-edd8-4f5c-b035-ad3a647807b4
-  # install-octopus-cli-action resolves versions from releases.json in the
-  # OctopusDeploy/cli repo, which can lag the GitHub releases. 2.27.0 is the
-  # newest it lists, and it has `ephemeral-environment deprovision-project`.
-  OCTOPUS_CLI_VERSION: "2.31.1"
+  # install-octopus-cli-action resolves versions, `latest` included, from
+  # releases.json in the OctopusDeploy/cli repo, not from GitHub releases.
+  # That index can lag, and a pin newer than its top entry fails to install.
+  # `latest` follows the index. This workflow needs
+  # `ephemeral-environment deprovision-project`, which 2.27.0 has.
+  OCTOPUS_CLI_VERSION: latest
 
 jobs:
   deprovision:
