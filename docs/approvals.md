@@ -81,8 +81,8 @@ Editing rules needs `ApprovalRuleAdminister`. It's a space-wide permission, held
 
 ## Gaps and open questions
 
-- **One person is on both teams.** Cory is on Payments and Checkout, so the demo can't yet show a deployer who isn't allowed to approve. It needs a demo user who is on one team only.
-- **Production allows self-approval.** Turn on **Block approvals by the deployment creator** on rule 2 to show separation of duties. That needs a second person on the Managers team.
+- **One person is on both teams.** Cory is on Payments and Checkout, so the demo doesn't show a deployer who isn't allowed to approve. Not required. A demo user on one team only would make the demo cleaner.
+- **Production allows self-approval.** Not required. Turning on **Block approvals by the deployment creator** on rule 2 would show separation of duties, for a cleaner demo. It needs a second person on the Managers team.
 - **Pull request environments aren't covered.** They carry no tags, so no rule matches them. That's intended.
 - **Octopus Approvals is in Public Preview.**
 
