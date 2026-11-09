@@ -4,15 +4,16 @@
 # Each project in OCTOPUS_PR_PROJECTS (default: the three PT container projects) has its own
 # ephemeral environment for the pull request. Deprovisioning runs that
 # project's deprovisioning runbook, which drops the pull request's database
-# and logins. The Kubernetes namespace stays until the shared-environment
-# question is settled (see the layer 6 plan).
+# and logins and deletes that track's namespace.
 #
 # The projects share one pr-<number> environment, so they deprovision one at
 # a time.
 #
 # A project with no pr-<number> environment is skipped. That covers pull
 # requests labeled skip-ephemeral from the start, and environments that
-# already expired.
+# already expired. Pull requests labeled automated-pr skip the job entirely.
+# If that label is added after an environment already exists, inactivity
+# expiry cleans it up instead.
 #
 # Inactivity expiry in Octopus is the backstop when this workflow doesn't run.
 
@@ -40,8 +41,12 @@ jobs:
   deprovision:
     name: Deprovision pr-${{ github.event.pull_request.number }} in ${{ matrix.project }}
     # Forks and Dependabot get no OIDC token or secrets, and build-image.yml
-    # never created an environment for them.
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]'
+    # never creates an environment for them, or for pull requests labeled
+    # automated-pr.
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository
+      && github.event.pull_request.user.login != 'dependabot[bot]'
+      && !contains(github.event.pull_request.labels.*.name, 'automated-pr')
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

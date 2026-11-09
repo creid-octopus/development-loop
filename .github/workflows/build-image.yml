@@ -41,7 +41,7 @@
 # AIAssisted is true when a commit in the push or pull request has an AI
 # co-author trailer, or the pull request has the ai-assisted label.
 # Pull request releases also carry PullRequestNumber, which names pr-<num>.
-# The skip-ephemeral label skips the pull request release (see the release job).
+# The skip-ephemeral and automated-pr labels skip the pull request release (see the release job).
 # pr-environment-teardown.yml deprovisions pr-<num> when the pull request closes.
 #
 # Pull request releases go only to projects in OCTOPUS_PR_PROJECTS (default: the
@@ -528,9 +528,11 @@ jobs:
   # ── Octopus release ────────────────────────────────────────────────────────
   # One job per Octopus project. fail-fast is off so a project that does not
   # exist yet does not stop the others.
-  # A pull request with the skip-ephemeral label still builds and pushes its
-  # packages, but gets no release, so Octopus creates no pr-<num> environment.
-  # The label is read when the workflow starts: add it before the next push.
+  # A pull request with the skip-ephemeral or automated-pr label still builds and
+  # pushes its packages, but gets no release, so Octopus creates no pr-<num>
+  # environment. automated-pr marks bot pull requests (Dependabot applies it):
+  # an environment for one is a manual choice, not automatic.
+  # Labels are read when the workflow starts: add one before the next push.
   release:
     name: Release to ${{ matrix.project }}
     needs: [build, octopus-packages]
@@ -538,6 +540,7 @@ jobs:
       github.event_name == 'pull_request'
       && needs.build.outputs.deployable == 'true'
       && !contains(github.event.pull_request.labels.*.name, 'skip-ephemeral')
+      && !contains(github.event.pull_request.labels.*.name, 'automated-pr')
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
