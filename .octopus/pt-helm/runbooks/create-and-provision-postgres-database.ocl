@@ -17,7 +17,7 @@ process {
     process_template "create-owner-role" {
         name = "Create owner role"
         process_template_slug = "postgres-create-user-if-not-exists"
-        version_mask = "PreRelease"
+        version_mask = "1.X"
 
         parameter "Postgres.TargetRole" {
             value = "local-postgres"
