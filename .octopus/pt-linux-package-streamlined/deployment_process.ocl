@@ -1,3 +1,17 @@
+process_template "run-a-process-template" {
+    name = "Run a Process Template"
+    process_template_slug = "predeploy-boilerplate"
+    version_mask = "2.X"
+
+    parameter "Predeploy.WorkerPool" {
+        value = "WorkerPools-82"
+    }
+
+    parameter "Predeploy.AIReview.RunEnvs" {
+        value = "Environments-3,Environments-4"
+    }
+}
+
 process_template "run-flyway-migrations" {
     name = "Run Flyway migrations"
     process_template_slug = "postgres-apply-flyway-migrations"
