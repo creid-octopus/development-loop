@@ -118,7 +118,7 @@ The Rego was checked locally with OPA 1.10.1 (`opa check --strict`, and `opa eva
 
 | Case | Message |
 | --- | --- |
-| No approval gates the deployment or runbook run | "This deployment of PT - Linux Package Streamlined to Production has no approval gating it. Production changes need a recorded approval before they run. To add one, ask a space manager for an approval rule that covers this project in Production. Rule `Production Release Approval` matches projects tagged `Change Approvals/ProductionOnly`." A runbook run says "runbook run" instead of "deployment" |
+| No approval gates the deployment or runbook run | "This deployment of PT - Linux Package Streamlined to Production has no approval gating it. Production changes need a recorded approval before they run. Approval is gated by a project tag: tag the project `Change Approvals/ProductionOnly` and the `Production Release Approval` rule will require an approval before it runs. If the project already has that tag, ask a space manager to check the rule." A runbook run says "runbook run" instead of "deployment" |
 
 It starts in warn mode, like `Require Team Approval`. `blocking_statuses` is empty, so every violation warns. Add `ProjectStatus/Active` to block active projects once the Evaluations tab is clean.
 
