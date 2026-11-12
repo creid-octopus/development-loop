@@ -1,0 +1,79 @@
+name = "Restart app"
+cancel_queued_tasks = true
+cancel_running_tasks = true
+default_guided_failure_mode = "EnvironmentDefault"
+description = "Restarts the app on each app server and waits for it to come back, then checks /health/db. Uses systemd when the unit is installed, and service.sh otherwise. Doesn't change the installed version. Run it after a server restart, or to clear a stuck process."
+
+connectivity_policy {
+    allow_deployments_to_no_targets = false
+}
+
+run_retention_policy {
+    type = "Default"
+}
+
+process {
+    step "restart-app" {
+        name = "Restart app"
+        properties = {
+            Octopus.Action.TargetRoles = "app-server"
+        }
+
+        action {
+            action_type = "Octopus.Script"
+            properties = {
+                Octopus.Action.RunOnServer = "false"
+                Octopus.Action.Script.ScriptBody = <<-EOT
+                    set -euo pipefail
+                    APP_DIR="#{Project.Server.InstallDirectory}"
+                    if [ ! -f "$APP_DIR/service.sh" ]; then
+                      echo "No app in $APP_DIR. Deploy a release first."
+                      exit 1
+                    fi
+                    if command -v systemctl >/dev/null 2>&1 && systemctl cat developmentloop.service >/dev/null 2>&1; then
+                      echo "Restarting with systemd."
+                      systemctl restart developmentloop.service
+                    else
+                      echo "systemd unit not found. Restarting with service.sh."
+                      bash "$APP_DIR/service.sh" restart
+                    fi
+                    bash "$APP_DIR/service.sh" wait
+                    EOT
+                Octopus.Action.Script.ScriptSource = "Inline"
+                Octopus.Action.Script.Syntax = "Bash"
+            }
+        }
+    }
+
+    process_template "health-check" {
+        name = "Health check"
+        process_template_slug = "linux-health-check"
+        version_mask = "1.X"
+
+        parameter "HealthCheck.TargetTag" {
+            value = "app-server"
+        }
+
+        parameter "HealthCheck.BaseUrl" {
+            value = "http://localhost:#{Project.Server.Port}"
+        }
+
+        parameter "HealthCheck.ExpectedDatabase" {
+            value = "#{Project.Postgres.DatabaseName}"
+        }
+
+        parameter "HealthCheck.ExpectedUser" {
+            value = "#{Project.Postgres.AppRole}"
+        }
+    }
+
+    process_template "postdeploy-notification" {
+        name = "Postdeploy Notification"
+        process_template_slug = "notifications-postdeploy"
+        version_mask = "5.X"
+
+        parameter "Parameters.CustomMessage" {
+            value = "Restarted: #{Project.Environment.Url}"
+        }
+    }
+}

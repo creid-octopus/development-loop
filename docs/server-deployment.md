@@ -42,6 +42,33 @@ Both paths share the database steps. The same roles, migrations, and lock step r
 
 Steps 5 to 7 live in the process template `linux-deploy-package`. Step 7 lives in the package. The app owns how it restarts. The template stays generic.
 
+## The streamlined project
+
+PT - Linux Package Streamlined (`.octopus/pt-linux-package-streamlined`) is a shorter version for demos. It deploys the same packages to the same app servers, folder, and port, so the two projects overwrite each other. The last deployment wins.
+
+| Step | PT - Linux Package | Streamlined |
+| --- | --- | --- |
+| Predeploy Boilerplate (rollback and AI-assisted pauses) | Yes | No |
+| Predeploy Notification | Yes | No |
+| Verify package attestation | Yes | No |
+| Verify database ready | Yes | No |
+| Run Flyway migrations | Yes | Yes |
+| Lock migration history | Yes | Yes |
+| Deploy app package | Yes | Yes |
+| Health check | Yes | Yes |
+| Postdeploy Notification | Yes | Yes. A policy blocks Production deploys without it |
+| Show app URL | Yes | Yes |
+
+What it gives up:
+
+- **No rollback detection.** Without Predeploy Boilerplate, a rollback doesn't pause at `Confirm rollback`, and `Postgres.Review.Policy` is always `risky`. The DBA review pauses only for risky SQL and hazards, not for every rollback.
+- **No AI-assisted pause.** `Require Predeploy Gates` warns on every deployment.
+- **No attestation check.**
+
+It isn't in the release train. Both Linux projects would then deploy to the same Development slot every hour. Release it by hand.
+
+The project has one runbook, **Restart app**. It restarts the app on each server (with systemd when the unit is installed, otherwise `service.sh`), waits for `/health`, checks `/health/db`, and notifies Slack. It doesn't change the installed version. Use it after a container restart, which leaves the app stopped. Because the two projects share the slot, it restarts whichever project deployed last.
+
 ## Local app servers
 
 The `local-workloads` stack runs three Linux Tentacles with Node.js. Each registers as its own deployment target in one environment.
@@ -54,7 +81,7 @@ The `local-workloads` stack runs three Linux Tentacles with Node.js. Each regist
 
 The containers have no systemd. `service.sh` stands in. On a real server, install `developmentloop.service` once. `PostDeploy.sh` then restarts the unit.
 
-After a container restart the app is not running. Redeploy the release or run `docker exec <container> bash /opt/developmentloop/current/service.sh start`.
+After a container restart the app is not running. Run the **Restart app** runbook on PT - Linux Package Streamlined, redeploy the release, or run `docker exec <container> bash /opt/developmentloop/current/service.sh start`.
 
 ## The runtime is not in the package
 
