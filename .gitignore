@@ -1,5 +1,6 @@
 # ── Local files/documentation ──────────────────────────────────────────────────
 agent-files/
+.octopus/pt-linux-package-streamlined/README.md
 
 
 # ── Terraform ──────────────────────────────────────────────────────────────────

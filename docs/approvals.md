@@ -109,3 +109,21 @@ So a policy can check coverage without knowing the rules.
 The Rego was checked locally with OPA 1.10.1 (`opa check --strict`, and `opa eval` against sample inputs for each case) before it was published.
 
 **Tags are only as strong as whoever can apply them.** Locking the tag sets stops new tags. But applying a tag to a project needs `ProjectEdit`, which project teams usually have. A team could switch its project from `Active` to `Onboarding` and get warnings instead, or remove `TeamOwner`. That's acceptable for now. If a block has to hold, scope `ProjectEdit` more tightly, or have the platform team own status changes.
+
+## The `Require Production Approval` policy
+
+`octopus-base-infrastructure/.octopus/policies/require_production_approval.ocl` covers every deployment and runbook run in an environment tagged `Meta-Environment/Production`. It passes when `RequiresApproval` is `true` and fails otherwise, including when the field is missing. It doesn't name any rule or tool, so an ITSM change request (layer 10) passes the same way, if it sets `RequiresApproval` as the schema describes. That needs checking in layer 10.
+
+`RequiresApproval` is an explicit `false` when no rule matched. Checked November 12 in a Development deploy (`ServerTasks-54871`) and a Production runbook run (`ServerTasks-50782`). A runbook run's input has the same field and a `Runbook` block.
+
+| Case | Message |
+| --- | --- |
+| No approval gates the deployment or runbook run | "This deployment of PT - Linux Package Streamlined to Production has no approval gating it. Production changes need a recorded approval before they run. To add one, ask a space manager for an approval rule that covers this project in Production. Rule `Production Release Approval` matches projects tagged `Change Approvals/ProductionOnly`." A runbook run says "runbook run" instead of "deployment" |
+
+It starts in warn mode, like `Require Team Approval`. `blocking_statuses` is empty, so every violation warns. Add `ProjectStatus/Active` to block active projects once the Evaluations tab is clean.
+
+The Rego was checked locally with OPA 1.10.1 (`opa check --strict` and `opa eval` against sample inputs). The first draft didn't load: Rego doesn't allow `sprintf` in a `default` rule, so the violation is a second rule that can't be true at the same time as the passing one.
+
+Today the four PT projects pass, because each carries `Change Approvals/ProductionOnly`. PT - Linux Package Streamlined has no tags and warns in Production.
+
+**Runbook runs need an approval too.** An approval rule can't pick individual runbooks. Any runbook run in Production for a project that matches rule 2 raises a change request. That includes provisioning runs started by the tenant reconciler for a new tenant, which then wait for a Managers approval.
