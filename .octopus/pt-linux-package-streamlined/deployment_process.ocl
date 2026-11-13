@@ -1,5 +1,5 @@
-process_template "run-a-process-template" {
-    name = "Run a Process Template"
+process_template "predeploy-boilerplate" {
+    name = "Predeploy Boilerplate"
     process_template_slug = "predeploy-boilerplate"
     version_mask = "2.X"
 
