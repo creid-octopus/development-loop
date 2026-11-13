@@ -41,6 +41,7 @@ For the pauses inside the deployment process, see [`database-migrations.md`](dat
 | PT - Kustomize | `Checkout` | `ProductionOnly` | `Active` |
 | PT - Raw YAML | `Checkout` | `ProductionOnly` | `Active` |
 | PT - Linux Package | `Payments` | `ProductionOnly` | `Active` |
+| PT - Linux Package Streamlined | `Payments` | `ProductionOnly` | `Active`. It started with no tags. See [Setting up a new pipeline](#setting-up-a-new-pipeline) |
 
 ## Rules
 
@@ -104,11 +105,13 @@ So a policy can check coverage without knowing the rules.
 | The project has no `TeamOwner` tag | "PT - Raw YAML has no `TeamOwner` tag, so no team signs off on its deploys to Test, a shared environment. Tag the project with the team that owns it." |
 | The project has an owner, but no rule matched (`RequiresApproval` is false) | "Checkout owns PT - Kustomize, but no approval rule covers it in Test, a shared environment. Other teams can deploy it here without Checkout's sign-off. To add one, ask a space manager for an approval rule on `TeamOwner/Checkout`." |
 
-**`ProjectStatus` decides the outcome.** The `action` in a Rego result overrides the policy's setting in the UI. The policy returns `block` when the project's status is in `blocking_statuses`, and `warn` otherwise. That covers `Onboarding` projects and projects with no status tag. The set is `ProjectStatus/Active` (November 9, `octopus-base-infrastructure` `384a925`). All four PT projects are `Active`, owned, and covered by a rule, so none of them is blocked. To demo a block, remove a project's `TeamOwner` tag and deploy it to Test.
+**The policy is advisory.** Teams should know they *can* require an approval, not that they *must*, and the platform team communicates the options. Every violation warns, including on `Active` projects. Confirmed November 13 on `Deployments-158968` and `-158969`: an `Active` project with no `TeamOwner` warned in Test.
+
+The mechanism for blocking is still there. The `action` in a Rego result overrides the policy's setting in the UI. The policy returns `block` when the project's status is in `blocking_statuses`, and `warn` otherwise. The set is empty on purpose. A first version briefly put `ProjectStatus/Active` in it (`384a925`), and it was never published. To turn blocking on later, add `ProjectStatus/Active` to the set and publish.
 
 The Rego was checked locally with OPA 1.10.1 (`opa check --strict`, and `opa eval` against sample inputs for each case) before it was published.
 
-**Tags are only as strong as whoever can apply them.** Locking the tag sets stops new tags. But applying a tag to a project needs `ProjectEdit`, which project teams usually have. A team could switch its project from `Active` to `Onboarding` and get warnings instead, or remove `TeamOwner`. That's acceptable for now. If a block has to hold, scope `ProjectEdit` more tightly, or have the platform team own status changes.
+**Tags are only as strong as whoever can apply them.** Locking the tag sets stops new tags. But applying a tag to a project needs `ProjectEdit`, which project teams usually have. A team could remove `TeamOwner` or change its `ProjectStatus`. That doesn't matter while the policy only warns. If a block ever has to hold, scope `ProjectEdit` more tightly, or have the platform team own status changes.
 
 ## The `Require Production Approval` policy
 
@@ -120,10 +123,47 @@ The Rego was checked locally with OPA 1.10.1 (`opa check --strict`, and `opa eva
 | --- | --- |
 | No approval gates the deployment or runbook run | "This deployment of PT - Linux Package Streamlined to Production has no approval gating it. Production changes need a recorded approval before they run. Approval is gated by a project tag: tag the project `Change Approvals/ProductionOnly` and the `Production Release Approval` rule will require an approval before it runs. If the project already has that tag, ask a space manager to check the rule." A runbook run says "runbook run" instead of "deployment" |
 
-It starts in warn mode, like `Require Team Approval`. `blocking_statuses` is empty, so every violation warns. Add `ProjectStatus/Active` to block active projects once the Evaluations tab is clean.
+An approval before Production is a baseline control, unlike team ownership, so this one blocks on `ProjectStatus/Active` projects and warns on everything else (`Onboarding`, or no status). It only fails when no approval rule matched at all, never while a change request is pending, and the fix is always the tag in the message. Case 4 on November 13 showed the warning on a deploy to Production without `ProductionOnly`.
 
 The Rego was checked locally with OPA 1.10.1 (`opa check --strict` and `opa eval` against sample inputs). The first draft didn't load: Rego doesn't allow `sprintf` in a `default` rule, so the violation is a second rule that can't be true at the same time as the passing one.
 
-Today the four PT projects pass, because each carries `Change Approvals/ProductionOnly`. PT - Linux Package Streamlined has no tags and warns in Production.
+The five PT projects pass when they carry `Change Approvals/ProductionOnly`. A project without it is the case this policy exists for: on November 13, PT - Linux Package Streamlined without the tag warned (`Deployments-158971`), and then, once the policy blocked `Active` projects, was blocked (`Deployments-158973`, state Failed, no change request).
 
 **Runbook runs need an approval too.** An approval rule can't pick individual runbooks. Any runbook run in Production for a project that matches rule 2 raises a change request. That includes provisioning runs started by the tenant reconciler for a new tenant, which then wait for a Managers approval.
+
+That includes the `Restart app` runbook. In Test and Production it raised a change request each (November 13), and that's accepted for now: Octopus engineering is working on runbook-level approval scoping, so there's no exemption by runbook name, and no separate operations project. The extra approvals will go away when scoping lands.
+
+## The `Require Predeploy Gates` policy
+
+`octopus-base-infrastructure/.octopus/policies/require_predeploy_gates.ocl` checks that a deployment runs the Predeploy Boilerplate process template with its gates in place: `Calculate Deployment Mode` always runs, and the rollback and AI-assisted review pauses are enabled and not skipped. It's how a rollback problem in a higher environment shows up. It warns.
+
+**Where it applies.** Deployments to Production, and to shared environments such as Test (`EnvironmentUsage/Shared`). Not Development, runbook runs, or `pr-<n>`. Development is left out on purpose: a developer working on a new pipeline would otherwise get a boilerplate warning on the very first deploy, before it matters. Rollbacks and AI-assisted releases need their pauses in the higher environments.
+
+**The naming case.** It has a second, separate failure reason. When the gates are in place but the boilerplate step's slug isn't `predeploy-boilerplate`, the policy warns and names the slug it found. Other steps refer to the boilerplate by name, such as the rollback expression on `Postgres.Review.Policy`, which reads `Octopus.Action[Predeploy Boilerplate-Calculate Deployment Mode]`. With a different name nothing fails: the expression stops matching, and a rollback no longer pauses at the DBA review. The policy input has each step's `Id` and `Slug` and no display name, so the slug stands in for the name. In the Octopus UI, regenerate the slug when you rename the step. Confirmed November 13 on `Deployments-158972`: a release made before the rename warned with the slug `run-a-process-template`.
+
+The Rego was checked with OPA 1.10.1: a pass, the naming case, no boilerplate, a skipped or disabled gate, and a conditional mode step. When the gates and the name both fail, the gates reason shows first.
+
+`Confirm Latest Predeploy Boilerplate Versioning` isn't activated. It's an inventory tool, run in evaluate mode, and it appears in no task log.
+
+## Setting up a new pipeline
+
+PT - Linux Package Streamlined started with no tags, and the policies and rules responded as tags were added. Results confirmed from the task logs on November 12 and 13:
+
+| Stage | Project tags | Result |
+| --- | --- | --- |
+| Development, first deploy | None | No warnings. `Require Predeploy Gates` doesn't cover Development (`Deployments-158963`). Before it was scoped, the same deploy warned (`Deployments-158961`) |
+| Test | None | Two warnings: `Require Predeploy Gates`, and `Require Team Approval` (no `TeamOwner`). The deploy goes ahead (`Deployments-158964`) |
+| Test | `Active`, no owner | `Require Team Approval` still warns. It's advisory, so it never blocks (`Deployments-158969`) |
+| Test | Owned | Rule 21 raises a Payments change request, `OCT57257` (`Deployments-158966`). A redeploy links to it and raises no new one (`Deployments-158970`) |
+| Production | Owned, `ProductionOnly` | Rule 2 raises a Managers change request, `OCT57270` (`Deployments-158967`) |
+| Production | `Active`, no `ProductionOnly` | `Require Production Approval` warns with the tag-first message (`Deployments-158971`), and blocks once it blocks `Active` projects (`Deployments-158973`) |
+| Test, Production | Owned, `ProductionOnly` | A boilerplate step with the old name warns (`Deployments-158972`) |
+| All three, new release | `Active`, `TeamOwner/Payments`, `ProductionOnly` | `1.1.17-FullPolicyApproval`: no warnings, `OCT57810` in Test and `OCT57811` in Production (`Deployments-158974`, `-158976`, `-158977`) |
+| All three, rollback | Same tags | `1.1.16-Rollback`: `Confirm rollback` and the DBA review in every environment, plus `OCT57822` in Test (`Deployments-158978`, `-158979`). Production waits on `OCT57825` (`Deployments-158980`), left queued for a live demo |
+
+The order inside a task is: policies, then the change request, then the pauses inside the deployment. A block appears before any change request exists.
+
+`Restart app` raised a change request in Test (`OCT57783`) and Production (`OCT57785`), as in [`Require Production Approval`](#the-require-production-approval-policy).
+
+To run it again, remove the tags to go back to the start. A redeploy of the same release links to an approved change request instead of raising a new one, so create a new release for a fresh one.
+

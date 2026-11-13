@@ -53,6 +53,7 @@ Local details: [`docs/local-development.md`](docs/local-development.md).
 
 - Roll forward by default. Rollback means redeploying an older release, and it's a last resort.
 - A rollback pauses twice: `Confirm rollback` in `predeploy-boilerplate`, then the DBA review before migrate. Keep `predeploy-boilerplate` first in every process, and keep the rollback expression on `Postgres.Review.Policy`. If the project and environment match an approval rule, a rollback also raises a change request before it starts.
+- Name the boilerplate step `Predeploy Boilerplate`, with the slug `predeploy-boilerplate`. The rollback expression refers to it by name, so any other name stops a rollback pausing at the DBA review without an error. `Require Predeploy Gates` checks the slug. When you rename the step in the Octopus UI, regenerate the slug too.
 - Migrate still runs on a rollback after DBA approval. It never undoes versioned migrations, and it can apply older `R__` files again.
 - Don't write Flyway undo scripts unless a task asks for them.
 
@@ -78,6 +79,7 @@ Local details: [`docs/local-development.md`](docs/local-development.md).
 - Team approvals are Octopus Approvals rules, scoped by the `TeamOwner` project tag and the `EnvironmentUsage` environment tag. They aren't process steps or policies. Details: [`docs/approvals.md`](docs/approvals.md).
 - The rules aren't in Config as Code. Update `docs/approvals.md` when a rule or a tag changes.
 - Never tag Development with `EnvironmentUsage/Shared`. The release train deploys there unattended.
+- A Production deployment or runbook run needs an approval. Tag the project `Change Approvals/ProductionOnly`. `Require Production Approval` blocks `ProjectStatus/Active` projects without one and warns the rest. `Require Team Approval` is advisory and only warns.
 
 ### Secrets
 

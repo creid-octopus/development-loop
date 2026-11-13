@@ -44,11 +44,13 @@ Steps 5 to 7 live in the process template `linux-deploy-package`. Step 7 lives i
 
 ## The streamlined project
 
-PT - Linux Package Streamlined (`.octopus/pt-linux-package-streamlined`) is a shorter version for demos. It deploys the same packages to the same app servers, folder, and port, so the two projects overwrite each other. The last deployment wins.
+PT - Linux Package Streamlined (`.octopus/pt-linux-package-streamlined`) is a shorter version for demos, mostly released by hand. It deploys the same packages to the same app servers, folder, and port, so the two projects overwrite each other. The last deployment wins.
+
+It exists to show what setting up a new pipeline looks like when the process templates are ready: the project starts with no tags, and the policies and approval rules respond as each tag is added. The confirmed results are in [`approvals.md`](approvals.md#setting-up-a-new-pipeline).
 
 | Step | PT - Linux Package | Streamlined |
 | --- | --- | --- |
-| Predeploy Boilerplate (rollback and AI-assisted pauses) | Yes | No |
+| Predeploy Boilerplate (rollback and AI-assisted pauses) | Yes | Yes |
 | Predeploy Notification | Yes | No |
 | Verify package attestation | Yes | No |
 | Verify database ready | Yes | No |
@@ -59,15 +61,20 @@ PT - Linux Package Streamlined (`.octopus/pt-linux-package-streamlined`) is a sh
 | Postdeploy Notification | Yes | Yes. A policy blocks Production deploys without it |
 | Show app URL | Yes | Yes |
 
-What it gives up:
+What it gives up is the predeploy Slack notification, the attestation check, and the separate database check. The process started without the boilerplate, and it was added once the demo needed rollbacks. It keeps the same rules as the other projects:
 
-- **No rollback detection.** Without Predeploy Boilerplate, a rollback doesn't pause at `Confirm rollback`, and `Postgres.Review.Policy` is always `risky`. The DBA review pauses only for risky SQL and hazards, not for every rollback.
-- **No AI-assisted pause.** `Require Predeploy Gates` warns on every deployment.
-- **No attestation check.**
+- **The step is named `Predeploy Boilerplate`, with the slug `predeploy-boilerplate`.** The DBA review refers to it by name. `Require Predeploy Gates` checks the slug.
+- **`Postgres.Review.Policy` carries the rollback expression**, so a rollback pauses at `Confirm rollback` and then at the DBA review.
 
-It isn't in the release train. Both Linux projects would then deploy to the same Development slot every hour. Release it by hand.
+It differs from PT - Linux Package in the Octopus settings, not in the OCL:
 
-The project has one runbook, **Restart app**. It restarts the app on each server (with systemd when the unit is installed, otherwise `service.sh`), waits for `/health`, checks `/health/db`, and notifies Slack. It doesn't change the installed version. Use it after a container restart, which leaves the app stopped. Because the two projects share the slot, it restarts whichever project deployed last.
+- **Lifecycle:** `Default Promotion (Retain All)`: Development, Test, Production, with release retention set to forever. The demo keeps its releases and failed states.
+- **Tags:** none to start. The demo adds `ProjectStatus`, `TeamOwner`, and `Change Approvals/ProductionOnly` one at a time.
+- **Versioning:** the deploy step's package, with release names like `1.1.17-FullPolicyApproval` for demo states.
+
+It isn't in the release train. Both Linux projects would then deploy to the same Development slot every hour.
+
+The project has one runbook, **Restart app**. It restarts the app on each server (with systemd when the unit is installed, otherwise `service.sh`), waits for `/health`, checks `/health/db`, and notifies Slack. It doesn't change the installed version. Use it after a container restart, which leaves the app stopped. Because the two projects share the slot, it restarts whichever project deployed last. In a tagged project it raises a change request in Test and Production, like any runbook. See [`approvals.md`](approvals.md#the-require-production-approval-policy).
 
 ## Local app servers
 
